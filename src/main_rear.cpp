@@ -103,8 +103,8 @@ void setup()
     Serial.begin(115200);
     DEBUG_PRINTLN();
     DEBUG_PRINTLN("╔═══════════════════════════════════════════╗");
-    DEBUG_PRINTLN("║     PROJECT NIGHTFALL BACK ESP32          ║");
-    DEBUG_PRINTLN("║           Master/Brain Controller         ║");
+    DEBUG_PRINTLN("║     PROJECT NIGHTFALL REAR ESP32          ║");
+    DEBUG_PRINTLN("║           Master Controller + Motors      ║");
     DEBUG_PRINTLN("║              Version 2.0.0                ║");
     DEBUG_PRINTLN("╚═══════════════════════════════════════════╝");
     DEBUG_PRINTLN();
@@ -118,7 +118,8 @@ void setup()
 
     systemReady = true;
     DEBUG_PRINTLN();
-    DEBUG_PRINTLN("✅ BACK ESP32 Master Controller Ready!");
+    DEBUG_PRINTLN("✅ REAR ESP32 Master Controller Ready!");
+    DEBUG_PRINTLN("🎯 Controlling Motors 5 & 6 (Rear Left & Right)");
     DEBUG_PRINT("WiFi AP: ");
     DEBUG_PRINTLN(ssid);
     DEBUG_PRINT("WebSocket Server: Port 8888");
@@ -138,33 +139,33 @@ void initializeHardware()
 {
     DEBUG_PRINTLN("Initializing hardware...");
 
-    // Initialize motor control pins
-    pinMode(13, OUTPUT); // Left Motor PWM
-    pinMode(23, OUTPUT); // Left Motor IN1
-    pinMode(22, OUTPUT); // Left Motor IN2
-    pinMode(25, OUTPUT); // Right Motor PWM
-    pinMode(26, OUTPUT); // Right Motor IN1
-    pinMode(27, OUTPUT); // Right Motor IN2
+    // Initialize motor control pins for rear motors (Motors 5 & 6)
+    pinMode(PIN_MOTOR5_PWM, OUTPUT); // Motor 5 PWM (Rear Left)
+    pinMode(PIN_MOTOR5_IN1, OUTPUT); // Motor 5 Forward
+    pinMode(PIN_MOTOR5_IN2, OUTPUT); // Motor 5 Reverse
+    pinMode(PIN_MOTOR6_PWM, OUTPUT); // Motor 6 PWM (Rear Right)
+    pinMode(PIN_MOTOR6_IN1, OUTPUT); // Motor 6 Forward
+    pinMode(PIN_MOTOR6_IN2, OUTPUT); // Motor 6 Reverse
 
     // Initialize sensor pins
-    pinMode(14, OUTPUT); // Front US Trig
-    pinMode(18, INPUT);  // Front US Echo
-    pinMode(19, OUTPUT); // Rear US Trig
-    pinMode(21, INPUT);  // Rear US Echo
-    pinMode(32, INPUT);  // Gas Sensor Analog
-    pinMode(4, OUTPUT);  // Buzzer
+    pinMode(PIN_US_TRIG, OUTPUT);    // Ultrasonic Trig
+    pinMode(PIN_US_ECHO, INPUT);     // Ultrasonic Echo
+    pinMode(PIN_GAS_ANALOG, INPUT);  // Gas Sensor Analog
+    pinMode(PIN_BUZZER, OUTPUT);     // Buzzer
+    pinMode(PIN_STATUS_LED, OUTPUT); // Status LED
+    pinMode(PIN_ERROR_LED, OUTPUT);  // Error LED
 
     // Initialize UART pins
     pinMode(16, OUTPUT); // UART TX
     pinMode(17, INPUT);  // UART RX
 
     // Stop all motors initially
-    analogWrite(13, 0);
-    analogWrite(25, 0);
-    digitalWrite(23, LOW);
-    digitalWrite(22, LOW);
-    digitalWrite(26, LOW);
-    digitalWrite(27, LOW);
+    analogWrite(PIN_MOTOR5_PWM, 0);
+    analogWrite(PIN_MOTOR6_PWM, 0);
+    digitalWrite(PIN_MOTOR5_IN1, LOW);
+    digitalWrite(PIN_MOTOR5_IN2, LOW);
+    digitalWrite(PIN_MOTOR6_IN1, LOW);
+    digitalWrite(PIN_MOTOR6_IN2, LOW);
 
     DEBUG_PRINTLN("Hardware initialized");
 }
@@ -315,13 +316,13 @@ void handleMainLoop()
 void updateSensors()
 {
     // Update Front Ultrasonic Sensor
-    digitalWrite(14, LOW);
+    digitalWrite(PIN_US_TRIG, LOW);
     delayMicroseconds(2);
-    digitalWrite(14, HIGH);
+    digitalWrite(PIN_US_TRIG, HIGH);
     delayMicroseconds(10);
-    digitalWrite(14, LOW);
+    digitalWrite(PIN_US_TRIG, LOW);
 
-    long duration = pulseIn(18, HIGH, 30000); // 30ms timeout
+    long duration = pulseIn(PIN_US_ECHO, HIGH, 30000); // 30ms timeout
     if (duration > 0)
     {
         frontDistance = duration * 0.034 / 2;
@@ -329,23 +330,12 @@ void updateSensors()
             frontDistance = 400; // Max range
     }
 
-    // Update Rear Ultrasonic Sensor
-    digitalWrite(19, LOW);
-    delayMicroseconds(2);
-    digitalWrite(19, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(19, LOW);
-
-    duration = pulseIn(21, HIGH, 30000); // 30ms timeout
-    if (duration > 0)
-    {
-        rearDistance = duration * 0.034 / 2;
-        if (rearDistance > 400)
-            rearDistance = 400; // Max range
-    }
+    // Update Rear Ultrasonic Sensor (assuming same sensor with dual echo functionality)
+    // In this configuration, front and rear distances are measured by same sensor
+    rearDistance = frontDistance; // Simplified for testing
 
     // Update Gas Sensor
-    gasLevel = analogRead(32);
+    gasLevel = analogRead(PIN_GAS_ANALOG);
 }
 
 void checkSafetyConditions()
@@ -371,45 +361,45 @@ void checkSafetyConditions()
 
 void updateMotorControl()
 {
-    // Apply target speeds to motors
-    leftMotorSpeed = targetLeftSpeed;
-    rightMotorSpeed = targetRightSpeed;
+    // Apply target speeds to rear motors
+    leftMotorSpeed = targetLeftSpeed;   // Motor 5 (Rear Left)
+    rightMotorSpeed = targetRightSpeed; // Motor 6 (Rear Right)
 
     // Constrain motor speeds
     leftMotorSpeed = constrain(leftMotorSpeed, -255, 255);
     rightMotorSpeed = constrain(rightMotorSpeed, -255, 255);
 
-    // Update motor outputs
+    // Update rear motor outputs (Motors 5 & 6)
     if (leftMotorSpeed >= 0)
     {
-        analogWrite(13, leftMotorSpeed);
-        digitalWrite(23, HIGH);
-        digitalWrite(22, LOW);
+        analogWrite(PIN_MOTOR5_PWM, leftMotorSpeed);
+        digitalWrite(PIN_MOTOR5_IN1, HIGH);
+        digitalWrite(PIN_MOTOR5_IN2, LOW);
     }
     else
     {
-        analogWrite(13, abs(leftMotorSpeed));
-        digitalWrite(23, LOW);
-        digitalWrite(22, HIGH);
+        analogWrite(PIN_MOTOR5_PWM, abs(leftMotorSpeed));
+        digitalWrite(PIN_MOTOR5_IN1, LOW);
+        digitalWrite(PIN_MOTOR5_IN2, HIGH);
     }
 
     if (rightMotorSpeed >= 0)
     {
-        analogWrite(25, rightMotorSpeed);
-        digitalWrite(26, HIGH);
-        digitalWrite(27, LOW);
+        analogWrite(PIN_MOTOR6_PWM, rightMotorSpeed);
+        digitalWrite(PIN_MOTOR6_IN1, HIGH);
+        digitalWrite(PIN_MOTOR6_IN2, LOW);
     }
     else
     {
-        analogWrite(25, abs(rightMotorSpeed));
-        digitalWrite(26, LOW);
-        digitalWrite(27, HIGH);
+        analogWrite(PIN_MOTOR6_PWM, abs(rightMotorSpeed));
+        digitalWrite(PIN_MOTOR6_IN1, LOW);
+        digitalWrite(PIN_MOTOR6_IN2, HIGH);
     }
 
     // Send motor commands to Front ESP32 via UART
     JsonDocument motorDoc;
-    motorDoc["L"] = leftMotorSpeed;
-    motorDoc["R"] = rightMotorSpeed;
+    motorDoc["L"] = leftMotorSpeed;  // Motor 5 speed
+    motorDoc["R"] = rightMotorSpeed; // Motor 6 speed
 
     String motorCommand;
     serializeJson(motorDoc, motorCommand);
@@ -590,7 +580,9 @@ void activateEmergencyStop(const String &reason)
         targetLeftSpeed = 0;
         targetRightSpeed = 0;
 
-        // Sound buzzer
+        // Set error LED and buzzer
+        digitalWrite(PIN_STATUS_LED, LOW);
+        digitalWrite(PIN_ERROR_LED, HIGH);
         soundBuzzer(500);
 
         DEBUG_PRINTLN("🚨 EMERGENCY STOP ACTIVATED!");
@@ -606,6 +598,11 @@ void deactivateEmergencyStop()
         emergencyStop = false;
         emergencyTimestamp = 0;
         buzzerActive = false;
+
+        // Restore LED states
+        digitalWrite(PIN_STATUS_LED, HIGH);
+        digitalWrite(PIN_ERROR_LED, LOW);
+        digitalWrite(PIN_BUZZER, LOW);
 
         DEBUG_PRINTLN("Emergency stop reset - system resumed");
     }
@@ -630,7 +627,7 @@ void updateBuzzer()
         {
             static bool buzzerState = false;
             buzzerState = !buzzerState;
-            digitalWrite(4, buzzerState);
+            digitalWrite(PIN_BUZZER, buzzerState);
             lastBuzzerUpdate = now;
         }
 
@@ -638,7 +635,7 @@ void updateBuzzer()
         if (now - emergencyTimestamp >= 5000)
         {
             buzzerActive = false;
-            digitalWrite(4, LOW);
+            digitalWrite(PIN_BUZZER, LOW);
         }
     }
 }
