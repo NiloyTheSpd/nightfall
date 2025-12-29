@@ -6,6 +6,10 @@
  * @date    December 29, 2025
  *
  * Central configuration file for Phase 2 MVP Hybrid UART + WiFi Architecture
+ *
+ * TRIAL VERSION 1 - MOTOR TESTING FOCUS
+ * This version focuses solely on motor control testing with all non-essential
+ * hardware components disabled for streamlined motor verification.
  */
 
 #ifndef CONFIG_H
@@ -18,6 +22,9 @@
 #define VERSION_MINOR 0
 #define VERSION_PATCH 0
 #define VERSION_STRING "2.0.0"
+
+// ===== TRIAL VERSION 1 - MOTOR TESTING =====
+#define TRIAL_VERSION_1_MOTOR_TESTING 1
 
 // ===== HARDWARE CONFIGURATION =====
 #define WHEEL_DIAMETER 85.0 // mm
@@ -57,16 +64,22 @@
 #define CAMERA_QUALITY 10 // JPEG quality (1-63, lower = better)
 
 // ===== WEB DASHBOARD =====
+// DISABLED FOR MOTOR TESTING - Commented out
+/*
 #define WEBSOCKET_PORT 81
 #define HTTP_PORT 80
 #define MAX_WEBSOCKET_CLIENTS 4
 #define DASHBOARD_UPDATE_INTERVAL 100 // ms
+*/
 
 // ===== MACHINE LEARNING =====
+// DISABLED FOR MOTOR TESTING - Commented out
+/*
 #define ML_CONFIDENCE_THRESHOLD 0.6 // 60%
 #define ML_INFERENCE_INTERVAL 200   // ms
 #define ML_IMAGE_SIZE 96            // pixels
 #define ML_NUM_CLASSES 8
+*/
 
 // ===== POWER MANAGEMENT =====
 #define BATTERY_VOLTAGE_DIVIDER 2.0 // Voltage divider ratio
@@ -75,10 +88,13 @@
 #define SLEEP_INTERVAL 300000  // ms (5 minutes)
 
 // ===== DATA LOGGING =====
+// DISABLED FOR MOTOR TESTING - Commented out
+/*
 #define LOGGING_ENABLED true
 #define TELEMETRY_INTERVAL 1000 // ms
 #define SD_CARD_ENABLED true
 #define MAX_LOG_FILE_SIZE 10485760 // 10MB
+*/
 
 // ===== DEBUGGING =====
 #ifdef SERIAL_DEBUG

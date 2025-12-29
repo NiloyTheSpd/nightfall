@@ -1,16 +1,21 @@
 /**
- * @file    main_front.cpp
- * @brief   Project Nightfall - Phase 2 MVP FRONT ESP32 (Motor Slave)
+ * @file    main_front_motor_test.cpp
+ * @brief   Project Nightfall - Trial Version 1: MOTOR TESTING FOCUS
  * @author  Project Nightfall Team
- * @version 2.0.0
+ * @version 2.0.0-Trial1
  * @date    December 29, 2025
  *
- * Motor slave controller for the autonomous rescue robot. Handles:
- * - Listens on UART (Serial2) for motor commands {"L": val, "R": val}
- * - Dual motor driver control (4 motors total)
- * - Emergency stop if no UART data received for 1000ms
- * - Non-blocking operation with millis() timers
- * - Robust JSON parsing with ArduinoJson v7
+ * FRONT ESP32 - MOTOR SLAVE CONTROLLER (Motor Testing Version)
+ * This version focuses solely on motor control testing with all non-essential
+ * hardware components disabled for streamlined motor verification.
+ *
+ * TRIAL VERSION 1 - MOTOR TESTING FOCUS:
+ * - Keeps all motor control and UART communication code active
+ * - Comments out sensor initialization and reading
+ * - Comments out WiFi, WebSocket, and networking code
+ * - Comments out safety monitoring, gas sensors, etc.
+ * - Keeps emergency stop functionality
+ * - Maintains motor driver pin configurations
  */
 
 #include <Arduino.h>
@@ -33,9 +38,30 @@ int rightMotorSpeed = 0;
 int targetLeftSpeed = 0;
 int targetRightSpeed = 0;
 
-// Motor driver definitions (using preprocessor macros from platformio.ini)
-// Motor driver 1 (Front): MOTOR_LEFT_PWM, MOTOR_LEFT_IN1, MOTOR_LEFT_IN2, MOTOR_RIGHT_PWM, MOTOR_RIGHT_IN1, MOTOR_RIGHT_IN2
-// Motor driver 2 (Front Aux): MOTOR2_LEFT_PWM, MOTOR2_LEFT_IN1, MOTOR2_LEFT_IN2, MOTOR2_RIGHT_PWM, MOTOR2_RIGHT_IN1, MOTOR2_RIGHT_IN2
+// DISABLED FOR MOTOR TESTING - Sensor variables (commented out)
+// float frontDistance = 0.0;
+// float rearDistance = 0.0;
+// int gasLevel = 0;
+
+// DISABLED FOR MOTOR TESTING - WiFi variables (commented out)
+// const char* ssid = "ProjectNightfall";
+// const char* password = "rescue2025";
+
+// Motor driver 1 (Front)
+const int MOTOR1_LEFT_PWM = 13;
+const int MOTOR1_LEFT_IN1 = 23;
+const int MOTOR1_LEFT_IN2 = 22;
+const int MOTOR1_RIGHT_PWM = 25;
+const int MOTOR1_RIGHT_IN1 = 26;
+const int MOTOR1_RIGHT_IN2 = 27;
+
+// Motor driver 2 (Front Aux)
+const int MOTOR2_LEFT_PWM = 14;
+const int MOTOR2_LEFT_IN1 = 32;
+const int MOTOR2_LEFT_IN2 = 33;
+const int MOTOR2_RIGHT_PWM = 15;
+const int MOTOR2_RIGHT_IN1 = 19;
+const int MOTOR2_RIGHT_IN2 = 21;
 
 // Function declarations
 void setup();
@@ -54,6 +80,18 @@ void updateMotorDriver2(int leftSpeed, int rightSpeed);
 void stopAllMotors();
 void testMotorMovement();
 
+// DISABLED FOR MOTOR TESTING - Sensor functions (commented out)
+// void updateSensors();
+// void checkSafetyConditions();
+
+// DISABLED FOR MOTOR TESTING - WiFi/WebSocket functions (commented out)
+// void setupWiFi();
+// void handleWebSocketEvent();
+// void sendTelemetry();
+
+// DISABLED FOR MOTOR TESTING - Serial command handler (simplified)
+// void handleSerialCommands();
+
 // Setup function
 void setup()
 {
@@ -62,8 +100,9 @@ void setup()
     DEBUG_PRINTLN();
     DEBUG_PRINTLN("╔═══════════════════════════════════════════╗");
     DEBUG_PRINTLN("║     PROJECT NIGHTFALL FRONT ESP32         ║");
+    DEBUG_PRINTLN("║      TRIAL VERSION 1 - MOTOR TESTING      ║");
     DEBUG_PRINTLN("║            Motor Slave Controller         ║");
-    DEBUG_PRINTLN("║              Version 2.0.0                ║");
+    DEBUG_PRINTLN("║              Version 2.0.0-Trial1         ║");
     DEBUG_PRINTLN("╚═══════════════════════════════════════════╝");
     DEBUG_PRINTLN();
 
@@ -78,7 +117,8 @@ void setup()
     lastHeartbeat = millis();
 
     DEBUG_PRINTLN();
-    DEBUG_PRINTLN("✅ FRONT ESP32 Motor Slave Ready!");
+    DEBUG_PRINTLN("✅ FRONT ESP32 Motor Slave Ready (Trial Version 1)!");
+    DEBUG_PRINTLN("🔧 MOTOR TESTING MODE - Non-essential features disabled");
     DEBUG_PRINTLN("Listening for UART commands on Serial2");
     DEBUG_PRINTLN();
 }
@@ -95,12 +135,12 @@ void initializeHardware()
     DEBUG_PRINTLN("Initializing motor control hardware...");
 
     // Initialize Motor Driver 1 pins
-    pinMode(MOTOR_LEFT_PWM, OUTPUT);
-    pinMode(MOTOR_LEFT_IN1, OUTPUT);
-    pinMode(MOTOR_LEFT_IN2, OUTPUT);
-    pinMode(MOTOR_RIGHT_PWM, OUTPUT);
-    pinMode(MOTOR_RIGHT_IN1, OUTPUT);
-    pinMode(MOTOR_RIGHT_IN2, OUTPUT);
+    pinMode(MOTOR1_LEFT_PWM, OUTPUT);
+    pinMode(MOTOR1_LEFT_IN1, OUTPUT);
+    pinMode(MOTOR1_LEFT_IN2, OUTPUT);
+    pinMode(MOTOR1_RIGHT_PWM, OUTPUT);
+    pinMode(MOTOR1_RIGHT_IN1, OUTPUT);
+    pinMode(MOTOR1_RIGHT_IN2, OUTPUT);
 
     // Initialize Motor Driver 2 pins
     pinMode(MOTOR2_LEFT_PWM, OUTPUT);
@@ -116,6 +156,26 @@ void initializeHardware()
     DEBUG_PRINTLN("Motor control hardware initialized");
     DEBUG_PRINTLN("Motor Driver 1: PWM=13, IN1=23, IN2=22 (Left) | PWM=25, IN1=26, IN2=27 (Right)");
     DEBUG_PRINTLN("Motor Driver 2: PWM=14, IN1=32, IN2=33 (Left) | PWM=15, IN1=19, IN2=21 (Right)");
+
+    // DISABLED FOR MOTOR TESTING - Sensor initialization (commented out)
+    /*
+    DEBUG_PRINTLN("Initializing sensors...");
+    // Initialize sensor pins
+    pinMode(14, OUTPUT); // Front US Trig
+    pinMode(18, INPUT);  // Front US Echo
+    pinMode(19, OUTPUT); // Rear US Trig
+    pinMode(21, INPUT);  // Rear US Echo
+    pinMode(32, INPUT);  // Gas Sensor Analog
+    pinMode(4, OUTPUT);  // Buzzer
+    */
+
+    // DISABLED FOR MOTOR TESTING - WiFi initialization (commented out)
+    /*
+    DEBUG_PRINTLN("Initializing WiFi...");
+    setupWiFi();
+    */
+
+    DEBUG_PRINTLN("Hardware initialization complete (Motor Testing Mode)");
 }
 
 void handleMainLoop()
@@ -137,6 +197,26 @@ void handleMainLoop()
         sendHeartbeat();
         lastHeartbeat = now;
     }
+
+    // DISABLED FOR MOTOR TESTING - Sensor updates (commented out)
+    /*
+    // Update sensors every 100ms
+    if (now - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL)
+    {
+        updateSensors();
+        checkSafetyConditions();
+        lastSensorUpdate = now;
+    }
+    */
+
+    // DISABLED FOR MOTOR TESTING - WebSocket handling (commented out)
+    /*
+    // Handle WebSocket
+    webSocketServer.loop();
+    */
+
+    // DISABLED FOR MOTOR TESTING - Serial commands (simplified)
+    // handleSerialCommands();
 }
 
 void listenForUARTCommands()
@@ -211,6 +291,29 @@ void processMotorCommand(const String &command)
             DEBUG_PRINTLN("Test motor movement command received");
             testMotorMovement();
         }
+        // DISABLED FOR MOTOR TESTING - Additional commands (commented out)
+        /*
+        else if (cmd == "forward")
+        {
+            targetLeftSpeed = 150;
+            targetRightSpeed = 150;
+        }
+        else if (cmd == "backward")
+        {
+            targetLeftSpeed = -150;
+            targetRightSpeed = -150;
+        }
+        else if (cmd == "left")
+        {
+            targetLeftSpeed = -100;
+            targetRightSpeed = 100;
+        }
+        else if (cmd == "right")
+        {
+            targetLeftSpeed = 100;
+            targetRightSpeed = -100;
+        }
+        */
     }
 }
 
@@ -237,29 +340,29 @@ void updateMotorDriver1(int leftSpeed, int rightSpeed)
     // Motor Driver 1 - Left motor
     if (leftSpeed >= 0)
     {
-        analogWrite(MOTOR_LEFT_PWM, leftSpeed);
-        digitalWrite(MOTOR_LEFT_IN1, HIGH);
-        digitalWrite(MOTOR_LEFT_IN2, LOW);
+        analogWrite(MOTOR1_LEFT_PWM, leftSpeed);
+        digitalWrite(MOTOR1_LEFT_IN1, HIGH);
+        digitalWrite(MOTOR1_LEFT_IN2, LOW);
     }
     else
     {
-        analogWrite(MOTOR_LEFT_PWM, abs(leftSpeed));
-        digitalWrite(MOTOR_LEFT_IN1, LOW);
-        digitalWrite(MOTOR_LEFT_IN2, HIGH);
+        analogWrite(MOTOR1_LEFT_PWM, abs(leftSpeed));
+        digitalWrite(MOTOR1_LEFT_IN1, LOW);
+        digitalWrite(MOTOR1_LEFT_IN2, HIGH);
     }
 
     // Motor Driver 1 - Right motor
     if (rightSpeed >= 0)
     {
-        analogWrite(MOTOR_RIGHT_PWM, rightSpeed);
-        digitalWrite(MOTOR_RIGHT_IN1, HIGH);
-        digitalWrite(MOTOR_RIGHT_IN2, LOW);
+        analogWrite(MOTOR1_RIGHT_PWM, rightSpeed);
+        digitalWrite(MOTOR1_RIGHT_IN1, HIGH);
+        digitalWrite(MOTOR1_RIGHT_IN2, LOW);
     }
     else
     {
-        analogWrite(MOTOR_RIGHT_PWM, abs(rightSpeed));
-        digitalWrite(MOTOR_RIGHT_IN1, LOW);
-        digitalWrite(MOTOR_RIGHT_IN2, HIGH);
+        analogWrite(MOTOR1_RIGHT_PWM, abs(rightSpeed));
+        digitalWrite(MOTOR1_RIGHT_IN1, LOW);
+        digitalWrite(MOTOR1_RIGHT_IN2, HIGH);
     }
 }
 
@@ -338,12 +441,12 @@ void resetEmergencyStop()
 void stopAllMotors()
 {
     // Stop Motor Driver 1
-    analogWrite(MOTOR_LEFT_PWM, 0);
-    analogWrite(MOTOR_RIGHT_PWM, 0);
-    digitalWrite(MOTOR_LEFT_IN1, LOW);
-    digitalWrite(MOTOR_LEFT_IN2, LOW);
-    digitalWrite(MOTOR_RIGHT_IN1, LOW);
-    digitalWrite(MOTOR_RIGHT_IN2, LOW);
+    analogWrite(MOTOR1_LEFT_PWM, 0);
+    analogWrite(MOTOR1_RIGHT_PWM, 0);
+    digitalWrite(MOTOR1_LEFT_IN1, LOW);
+    digitalWrite(MOTOR1_LEFT_IN2, LOW);
+    digitalWrite(MOTOR1_RIGHT_IN1, LOW);
+    digitalWrite(MOTOR1_RIGHT_IN2, LOW);
 
     // Stop Motor Driver 2
     analogWrite(MOTOR2_LEFT_PWM, 0);
@@ -365,6 +468,7 @@ void sendHeartbeat()
     heartbeatDoc["leftSpeed"] = leftMotorSpeed;
     heartbeatDoc["rightSpeed"] = rightMotorSpeed;
     heartbeatDoc["uptime"] = millis();
+    heartbeatDoc["trial_version"] = "motor_testing_v1";
 
     String heartbeat;
     serializeJson(heartbeatDoc, heartbeat);
@@ -405,7 +509,87 @@ void testMotorMovement()
     DEBUG_PRINTLN("Motor test complete");
 }
 
-// Serial command handler for debugging
+// DISABLED FOR MOTOR TESTING - Simplified sensor functions (commented out)
+/*
+void updateSensors()
+{
+    // Update Front Ultrasonic Sensor
+    digitalWrite(14, LOW);
+    delayMicroseconds(2);
+    digitalWrite(14, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(14, LOW);
+
+    long duration = pulseIn(18, HIGH, 30000); // 30ms timeout
+    if (duration > 0)
+    {
+        frontDistance = duration * 0.034 / 2;
+        if (frontDistance > 400)
+            frontDistance = 400; // Max range
+    }
+
+    // Update Rear Ultrasonic Sensor
+    digitalWrite(19, LOW);
+    delayMicroseconds(2);
+    digitalWrite(19, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(19, LOW);
+
+    duration = pulseIn(21, HIGH, 30000); // 30ms timeout
+    if (duration > 0)
+    {
+        rearDistance = duration * 0.034 / 2;
+        if (rearDistance > 400)
+            rearDistance = 400; // Max range
+    }
+
+    // Update Gas Sensor
+    gasLevel = analogRead(32);
+}
+
+void checkSafetyConditions()
+{
+    // SAFETY OVERRIDE: If (FrontDistance < 20cm) OR (Gas > 400), MUST override commands
+    if (!emergencyStop && (frontDistance < EMERGENCY_STOP_DISTANCE || gasLevel > GAS_THRESHOLD_ANALOG))
+    {
+        String reason = "";
+        if (frontDistance < EMERGENCY_STOP_DISTANCE)
+        {
+            reason = "Obstacle detected: " + String(frontDistance, 1) + "cm";
+        }
+        if (gasLevel > GAS_THRESHOLD_ANALOG)
+        {
+            if (reason.length() > 0)
+                reason += " & ";
+            reason += "Gas level critical: " + String(gasLevel);
+        }
+
+        handleEmergencyStop();
+    }
+}
+*/
+
+// DISABLED FOR MOTOR TESTING - WiFi setup (commented out)
+/*
+void setupWiFi()
+{
+    DEBUG_PRINTLN("Setting up WiFi Access Point...");
+
+    // Create WiFi access point
+    WiFi.softAP(ssid, password);
+    IPAddress IP = WiFi.softAPIP();
+
+    DEBUG_PRINT("Access Point IP: ");
+    DEBUG_PRINTLN(IP);
+    DEBUG_PRINT("SSID: ");
+    DEBUG_PRINTLN(ssid);
+    DEBUG_PRINT("Password: ");
+    DEBUG_PRINTLN(password);
+}
+*/
+
+// DISABLED FOR MOTOR TESTING - Serial command handler (simplified for testing)
+/*
 void handleSerialCommands()
 {
     if (Serial.available())
@@ -415,7 +599,7 @@ void handleSerialCommands()
 
         if (command == "status")
         {
-            Serial.println("=== FRONT ESP32 STATUS ===");
+            Serial.println("=== FRONT ESP32 STATUS (TRIAL VERSION 1) ===");
             Serial.print("Uptime: ");
             Serial.print(millis() / 1000);
             Serial.println(" seconds");
@@ -432,7 +616,8 @@ void handleSerialCommands()
             Serial.print("Last UART Update: ");
             Serial.print((millis() - lastUARTUpdate));
             Serial.println(" ms ago");
-            Serial.println("========================");
+            Serial.println("Mode: MOTOR TESTING");
+            Serial.println("===========================================");
         }
         else if (command == "emergency")
         {
@@ -460,7 +645,7 @@ void handleSerialCommands()
         }
         else if (command == "help")
         {
-            Serial.println("Available commands:");
+            Serial.println("Available commands (Motor Testing Mode):");
             Serial.println("  status  - Show system status");
             Serial.println("  emergency - Emergency stop");
             Serial.println("  reset - Reset emergency stop");
@@ -471,3 +656,4 @@ void handleSerialCommands()
         }
     }
 }
+*/
