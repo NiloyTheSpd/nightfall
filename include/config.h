@@ -23,6 +23,9 @@
 #define VERSION_PATCH 0
 #define VERSION_STRING "2.0.0"
 
+// ===== TEST VERSION 2 - UNIFIED WIFI NETWORKING =====
+#define TEST_VERSION_2_WIFI_NETWORKING 1
+
 // ===== TRIAL VERSION 1 - MOTOR TESTING =====
 #define TRIAL_VERSION_1_MOTOR_TESTING 1
 
@@ -64,13 +67,25 @@
 #define CAMERA_QUALITY 10 // JPEG quality (1-63, lower = better)
 
 // ===== WEB DASHBOARD =====
-// DISABLED FOR MOTOR TESTING - Commented out
-/*
-#define WEBSOCKET_PORT 81
+#ifdef TEST_VERSION_2_WIFI_NETWORKING
+#define WEBSOCKET_PORT 8888
 #define HTTP_PORT 80
 #define MAX_WEBSOCKET_CLIENTS 4
 #define DASHBOARD_UPDATE_INTERVAL 100 // ms
-*/
+
+// WiFi Network Configuration
+#define WIFI_SSID "ProjectNightfall"
+#define WIFI_PASSWORD "rescue2025"
+#define REAR_ESP32_IP "192.168.4.1"
+#define FRONT_ESP32_IP "192.168.4.2"
+#define CAMERA_ESP32_IP "192.168.4.3"
+#define WIFI_CHANNEL 1
+#define WIFI_HIDDEN false
+
+// Camera Stream Configuration
+#define CAMERA_STREAM_PORT 81
+#define CAMERA_CAPTURE_PORT 82
+#endif
 
 // ===== MACHINE LEARNING =====
 // DISABLED FOR MOTOR TESTING - Commented out
