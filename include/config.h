@@ -132,22 +132,31 @@
 
 // ===== PIN ASSIGNMENTS =====
 
-// ESP32 #1 (Front/Master Controller) - GPIO pins
+// ESP32 #1 (Front/Master Controller) - GPIO pins for 4-motor system
 #ifdef FRONT_CONTROLLER
-#define PIN_MOTOR_ENA 18 // Front Left Motor PWM
-#define PIN_MOTOR_IN1 19 // Front Left Motor Forward
-#define PIN_MOTOR_IN2 21 // Front Left Motor Reverse
-#define PIN_MOTOR_ENB 22 // Front Right Motor PWM
-#define PIN_MOTOR_IN3 23 // Front Right Motor Forward
-#define PIN_MOTOR_IN4 25 // Front Right Motor Reverse
+// L298N #1 - Front Main Motors (Motors 1 & 2)
+#define PIN_MOTOR1_PWM 13 // Motor 1 PWM (Front Left)
+#define PIN_MOTOR1_IN1 23 // Motor 1 Forward
+#define PIN_MOTOR1_IN2 22 // Motor 1 Reverse
+#define PIN_MOTOR2_PWM 25 // Motor 2 PWM (Front Right)
+#define PIN_MOTOR2_IN1 26 // Motor 2 Forward
+#define PIN_MOTOR2_IN2 27 // Motor 2 Reverse
 
-#define PIN_US_TRIG 26 // Front Ultrasonic Trigger
-#define PIN_US_ECHO 27 // Front Ultrasonic Echo
+// L298N #2 - Auxiliary Motors (Motors 3 & 4)
+#define PIN_MOTOR3_PWM 14 // Motor 3 PWM (Middle Left)
+#define PIN_MOTOR3_IN1 32 // Motor 3 Forward
+#define PIN_MOTOR3_IN2 33 // Motor 3 Reverse
+#define PIN_MOTOR4_PWM 15 // Motor 4 PWM (Middle Right)
+#define PIN_MOTOR4_IN1 19 // Motor 4 Forward
+#define PIN_MOTOR4_IN2 21 // Motor 4 Reverse
 
-#define PIN_GAS_ANALOG 32  // MQ-2 Gas Sensor Analog
-#define PIN_GAS_DIGITAL 33 // MQ-2 Gas Sensor Digital
+#define PIN_US_TRIG 18 // Front Ultrasonic Trigger
+#define PIN_US_ECHO 19 // Front Ultrasonic Echo
 
-#define PIN_BUZZER 13 // Audio Alert
+#define PIN_GAS_ANALOG 4  // MQ-2 Gas Sensor Analog
+#define PIN_GAS_DIGITAL 2 // MQ-2 Gas Sensor Digital
+
+#define PIN_BUZZER 5 // Audio Alert
 
 #define PIN_UART2_TX 16 // UART2 TX to Rear ESP32
 #define PIN_UART2_RX 17 // UART2 RX from Rear ESP32
@@ -155,20 +164,30 @@
 #define PIN_UART1_RX 12 // UART1 RX from Camera
 #endif
 
-// ESP32 #2 (Rear/Slave Controller) - GPIO pins
+// ESP32 #2 (Rear/Slave Controller) - GPIO pins for 2-motor system
 #ifdef REAR_CONTROLLER
-#define PIN_MOTOR_ENA 18 // Rear Left Motor PWM
-#define PIN_MOTOR_IN1 19 // Rear Left Motor Forward
-#define PIN_MOTOR_IN2 21 // Rear Left Motor Reverse
-#define PIN_MOTOR_ENB 22 // Rear Right Motor PWM
-#define PIN_MOTOR_IN3 23 // Rear Right Motor Forward
-#define PIN_MOTOR_IN4 25 // Rear Right Motor Reverse
+// L298N #3 - Rear Motors (Motors 5 & 6)
+#define PIN_MOTOR5_PWM 26 // Motor 5 PWM (Rear Left)
+#define PIN_MOTOR5_IN1 27 // Motor 5 Forward
+#define PIN_MOTOR5_IN2 25 // Motor 5 Reverse
+#define PIN_MOTOR6_PWM 23 // Motor 6 PWM (Rear Right)
+#define PIN_MOTOR6_IN1 22 // Motor 6 Forward
+#define PIN_MOTOR6_IN2 21 // Motor 6 Reverse
 
-#define PIN_US_TRIG 26 // Rear Ultrasonic Trigger
-#define PIN_US_ECHO 27 // Rear Ultrasonic Echo
+#define PIN_US_TRIG 32 // Rear Ultrasonic Trigger
+#define PIN_US_ECHO 33 // Rear Ultrasonic Echo
+
+#define PIN_GAS_ANALOG 15 // MQ-2 Gas Sensor Analog
+#define PIN_GAS_DIGITAL 4 // MQ-2 Gas Sensor Digital
+
+#define PIN_BUZZER 5     // Audio Alert
+#define PIN_STATUS_LED 2 // System Status LED
+#define PIN_ERROR_LED 0  // Error/Warning LED
 
 #define PIN_UART2_TX 16 // UART2 TX to Front ESP32
 #define PIN_UART2_RX 17 // UART2 RX from Front ESP32
+#define PIN_UART1_TX 14 // UART1 TX to Camera
+#define PIN_UART1_RX 12 // UART1 RX from Camera
 #endif
 
 // ESP32-CAM (Vision Module) - GPIO pins
