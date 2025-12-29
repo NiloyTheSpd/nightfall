@@ -1,0 +1,440 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1400" height="1000" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1000">
+  <defs>
+    <!-- Gradients for components -->
+    <linearGradient id="esp32Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4CAF50;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2E7D32;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="motorDriverGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF9800;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#F57C00;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="sensorGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2196F3;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1976D2;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="batteryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#9C27B0;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7B1FA2;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Wire styles -->
+    <style>
+      .power-wire { stroke: #F44336; stroke-width: 3; fill: none; }
+      .ground-wire { stroke: #000000; stroke-width: 2; fill: none; }
+      .uart-wire { stroke: #FFEB3B; stroke-width: 2; fill: none; }
+      .digital-wire { stroke: #2196F3; stroke-width: 2; fill: none; }
+      .analog-wire { stroke: #4CAF50; stroke-width: 2; fill: none; }
+      .motor-wire { stroke: #FF9800; stroke-width: 2; fill: none; }
+      .component { cursor: pointer; transition: all 0.3s ease; }
+      .component:hover { filter: brightness(1.2); }
+      .wire { cursor: pointer; }
+      .wire:hover { stroke-width: 4; }
+      .legend { font-family: Arial, sans-serif; font-size: 12px; }
+      .component-label { font-family: Arial, sans-serif; font-size: 10px; font-weight: bold; fill: white; text-anchor: middle; }
+      .pin-label { font-family: Arial, sans-serif; font-size: 9px; fill: #333; text-anchor: middle; }
+      .title { font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; fill: #333; text-anchor: middle; }
+      .subtitle { font-family: Arial, sans-serif; font-size: 14px; font-weight: bold; fill: #555; text-anchor: middle; }
+    </style>
+    
+    <!-- Arrow markers for connections -->
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
+    </marker>
+  </defs>
+  
+  <!-- Title -->
+  <text x="700" y="30" class="title">Project Nightfall - Interactive Circuit Diagram</text>
+  <text x="700" y="50" class="subtitle">Autonomous Rescue Robot - Complete System Overview</text>
+  
+  <!-- Legend -->
+  <g transform="translate(50, 80)">
+    <rect x="0" y="0" width="280" height="200" fill="#f5f5f5" stroke="#333" stroke-width="2" rx="5"/>
+    <text x="140" y="20" class="subtitle">Wire Color Legend</text>
+    
+    <line x1="20" y1="40" x2="60" y2="40" class="power-wire"/>
+    <text x="70" y="45" class="legend">Power (+14.8V, +5V)</text>
+    
+    <line x1="20" y1="60" x2="60" y2="60" class="ground-wire"/>
+    <text x="70" y="65" class="legend">Ground</text>
+    
+    <line x1="20" y1="80" x2="60" y2="80" class="uart-wire"/>
+    <text x="70" y="85" class="legend">UART Communication</text>
+    
+    <line x1="20" y1="100" x2="60" y2="100" class="digital-wire"/>
+    <text x="70" y="105" class="legend">Digital Signals</text>
+    
+    <line x1="20" y1="120" x2="60" y2="120" class="analog-wire"/>
+    <text x="70" y="125" class="legend">Analog Signals</text>
+    
+    <line x1="20" y1="140" x2="60" y2="140" class="motor-wire"/>
+    <text x="70" y="145" class="legend">Motor Control</text>
+    
+    <text x="140" y="170" class="legend">Click components for details</text>
+  </g>
+  
+  <!-- Power System -->
+  <g id="power-system">
+    <!-- Battery Pack -->
+    <g class="component" id="battery-pack" onclick="showDetails('battery-pack')">
+      <rect x="100" y="300" width="80" height="40" fill="url(#batteryGrad)" stroke="#333" stroke-width="2" rx="5"/>
+      <text x="140" y="325" class="component-label">14.8V</text>
+      <text x="140" y="340" class="component-label">Battery</text>
+      <text x="140" y="355" class="component-label">Pack</text>
+    </g>
+    
+    <!-- Rocker Switch -->
+    <g class="component" id="rocker-switch" onclick="showDetails('rocker-switch')">
+      <rect x="100" y="370" width="80" height="30" fill="#607D8B" stroke="#333" stroke-width="2" rx="5"/>
+      <text x="140" y="390" class="component-label">Power</text>
+      <text x="140" y="405" class="component-label">Switch</text>
+    </g>
+    
+    <!-- Fuse -->
+    <g class="component" id="fuse" onclick="showDetails('fuse')">
+      <rect x="100" y="430" width="80" height="25" fill="#FF5722" stroke="#333" stroke-width="2" rx="5"/>
+      <text x="140" y="447" class="component-label">10A Fuse</text>
+    </g>
+    
+    <!-- LM2596 Buck Converter -->
+    <g class="component" id="lm2596" onclick="showDetails('lm2596')">
+      <rect x="100" y="480" width="100" height="40" fill="#9C27B0" stroke="#333" stroke-width="2" rx="5"/>
+      <text x="150" y="505" class="component-label">LM2596</text>
+      <text x="150" y="520" class="component-label">14.8V→5V</text>
+    </g>
+    
+    <!-- Power Distribution -->
+    <rect x="250" y="480" width="120" height="80" fill="#E0E0E0" stroke="#333" stroke-width="2" rx="5"/>
+    <text x="310" y="500" class="component-label">Power</text>
+    <text x="310" y="515" class="component-label">Distribution</text>
+    <text x="310" y="530" class="component-label">5V Rails</text>
+    <text x="310" y="545" class="component-label">14.8V Rails</text>
+  </g>
+  
+  <!-- BACK ESP32 (Master Controller) -->
+  <g id="back-esp32">
+    <rect x="400" y="250" width="120" height="80" fill="url(#esp32Grad)" stroke="#333" stroke-width="2" rx="5"/>
+    <text x="460" y="275" class="component-label">BACK ESP32</text>
+    <text x="460" y="290" class="component-label">Master Controller</text>
+    <text x="460" y="305" class="component-label">GPIO Connections:</text>
+    <text x="410" y="320" class="pin-label">VIN: Power</text>
+    <text x="410" y="330" class="pin-label">GND: Ground</text>
+    <text x="410" y="340" class="pin-label">GPIO13-27: Motors</text>
+    <text x="410" y="350" class="pin-label">GPIO14,18,19,21: US</text>
+    <text x="410" y="360" class="pin-label">GPIO32: Gas Sensor</text>
+    <text x="410" y="370" class="pin-label">GPIO16,17: UART</text>
+  </g>
+  
+  <!-- FRONT ESP32 (Motor Controller) -->
+  <g id="front-esp32">
+    <rect x="600" y="400" width="120" height="80" fill="url(#esp32Grad)" stroke="#333" stroke-width="2" rx="5"/>
+    <text x="660" y="425" class="component-label">FRONT ESP32</text>
+    <text x="660" y="440" class="component-label">Motor Controller</text>
+    <text x="610" y="460" class="pin-label">VIN: 5V Power</text>
+    <text x="610" y="470" class="pin-label">GND: Ground</text>
+    <text x="610" y="480" class="pin-label">GPIO13-27: Motors</text>
+    <text x="610" y="490" class="pin-label">GPIO16,17: UART RX/TX</text>
+  </g>
+  
+  <!-- CAMERA ESP32 (Vision Module) -->
+  <g id="camera-esp32">
+    <rect x="900" y="150" width="120" height="80" fill="url(#esp32Grad)" stroke="#333" stroke-width="2" rx="5"/>
+    <text x="960" y="175" class="component-label">ESP32-CAM</text>
+    <text x="960" y="190" class="component-label">Vision Module</text>
+    <text x="910" y="210" class="pin-label">VIN: 5V Power</text>
+    <text x="910" y="220" class="pin-label">GND: Ground</text>
+    <text x="910" y="230" class="pin-label">GPIO4: Flash LED</text>
+    <text x="910" y="240" class="pin-label">GPIO33: Status LED</text>
+    <text x="910" y="250" class="pin-label">GPIO14,15: UART</text>
+  </g>
+  
+  <!-- L298N Motor Drivers -->
+  <g id="motor-drivers">
+    <!-- L298N #1 (Main Motors) -->
+    <g class="component" id="l298n1" onclick="showDetails('l298n1')">
+      <rect x="600" y="250" width="100" height="60" fill="url(#motorDriverGrad)" stroke="#333" stroke-width="2" rx="5"/>
+      <text x="650" y="275" class="component-label">L298N #1</text>
+      <text x="650" y="290" class="component-label">Main Motors</text>
+      <text x="610" y="305" class="pin-label">14.8V Input</text>
+      <text x="610" y="315" class="pin-label">5V Logic</text>
+    </g>
+    
+    <!-- L298N #2 (Aux Motors) -->
+    <g class="component" id="l298n2" onclick="showDetails('l298n2')">
+      <rect x="750" y="400" width="100" height="60" fill="url(#motorDriverGrad)" stroke="#333" stroke-width="2" rx="5"/>
+      <text x="800" y="425" class="component-label">L298N #2</text>
+      <text x="800" y="440" class="component-label">Aux Motors</text>
+      <text x="760" y="455" class="pin-label">14.8V Input</text>
+      <text x="760" y="465" class="pin-label">5V Logic</text>
+    </g>
+  </g>
+  
+  <!-- Sensors -->
+  <g id="sensors">
+    <!-- Front Ultrasonic -->
+    <g class="component" id="front-us" onclick="showDetails('front-us')">
+      <rect x="550" y="100" width="60" height="40" fill="url(#sensorGrad)" stroke="#333" stroke-width="2" rx="5"/>
+      <text x="580" y="120" class="component-label">US Front</text>
+      <text x="580" y="135" class="pin-label">HC-SR04</text>
+    </g>
+    
+    <!-- Rear Ultrasonic -->
+    <g class="component" id="rear-us" onclick="showDetails('rear-us')">
+      <rect x="650" y="600" width="60" height="40" fill="url(#sensorGrad)" stroke="#333" stroke-width="2" rx="5"/>
+      <text x="680" y="620" class="component-label">US Rear</text>
+      <text x="680" y="635" class="pin-label">HC-SR04</text>
+    </g>
+    
+    <!-- Gas Sensor -->
+    <g class="component" id="gas-sensor" onclick="showDetails('gas-sensor')">
+      <rect x="350" y="150" width="60" height="40" fill="url(#sensorGrad)" stroke="#333" stroke-width="2" rx="5"/>
+      <text x="380" y="170" class="component-label">Gas</text>
+      <text x="380" y="185" class="pin-label">MQ-2</text>
+    </g>
+    
+    <!-- Buzzer -->
+    <g class="component" id="buzzer" onclick="showDetails('buzzer')">
+      <rect x="350" y="220" width="60" height="30" fill="#FF5722" stroke="#333" stroke-width="2" rx="5"/>
+      <text x="380" y="240" class="component-label">Buzzer</text>
+    </g>
+  </g>
+  
+  <!-- Motors -->
+  <g id="motors">
+    <!-- Front Left Motor -->
+    <g class="component" id="fl-motor" onclick="showDetails('fl-motor')">
+      <circle cx="500" cy="180" r="25" fill="#795548" stroke="#333" stroke-width="2"/>
+      <text x="500" y="185" class="component-label">FL</text>
+    </g>
+    
+    <!-- Front Right Motor -->
+    <g class="component" id="fr-motor" onclick="showDetails('fr-motor')">
+      <circle cx="700" cy="180" r="25" fill="#795548" stroke="#333" stroke-width="2"/>
+      <text x="700" y="185" class="component-label">FR</text>
+    </g>
+    
+    <!-- Rear Left Motor -->
+    <g class="component" id="rl-motor" onclick="showDetails('rl-motor')">
+      <circle cx="500" cy="520" r="25" fill="#795548" stroke="#333" stroke-width="2"/>
+      <text x="500" y="525" class="component-label">RL</text>
+    </g>
+    
+    <!-- Rear Right Motor -->
+    <g class="component" id="rr-motor" onclick="showDetails('rr-motor')">
+      <circle cx="700" cy="520" r="25" fill="#795548" stroke="#333" stroke-width="2"/>
+      <text x="700" y="525" class="component-label">RR</text>
+    </g>
+  </g>
+  
+  <!-- Power Connections -->
+  <!-- Battery to Switch -->
+  <line x1="140" y1="340" x2="140" y2="370" class="power-wire"/>
+  
+  <!-- Switch to Fuse -->
+  <line x1="140" y1="400" x2="140" y2="430" class="power-wire"/>
+  
+  <!-- Fuse to LM2596 -->
+  <line x1="140" y1="455" x2="140" y2="480" class="power-wire"/>
+  
+  <!-- LM2596 to Distribution -->
+  <line x1="200" y1="500" x2="250" y2="500" class="power-wire"/>
+  
+  <!-- 14.8V to Motor Drivers -->
+  <line x1="310" y1="520" x2="600" y2="280" class="power-wire"/>
+  <line x1="310" y1="520" x2="750" y2="430" class="power-wire"/>
+  
+  <!-- 5V Distribution to ESP32s -->
+  <line x1="310" y1="490" x2="400" y2="280" class="power-wire"/>
+  <line x1="310" y1="490" x2="600" y2="430" class="power-wire"/>
+  <line x1="310" y1="490" x2="900" y2="190" class="power-wire"/>
+  
+  <!-- Ground Connections -->
+  <line x1="140" y1="300" x2="140" y2="700" class="ground-wire"/>
+  <line x1="140" y1="700" x2="1400" y2="700" class="ground-wire"/>
+  <line x1="140" y1="700" x2="460" y2="330" class="ground-wire"/>
+  <line x1="140" y1="700" x2="660" y2="480" class="ground-wire"/>
+  <line x1="140" y1="700" x2="960" y1="230" class="ground-wire"/>
+  <line x1="140" y1="700" x2="580" y2="140" class="ground-wire"/>
+  <line x1="140" y1="700" x2="680" y2="640" class="ground-wire"/>
+  <line x1="140" y1="700" x2="380" y1="190" class="ground-wire"/>
+  
+  <!-- UART Communication Lines -->
+  <!-- Back ESP32 to Front ESP32 -->
+  <line x1="520" y1="310" x2="600" y2="420" class="uart-wire" marker-end="url(#arrow)"/>
+  <line x1="520" y1="320" x2="600" y2="430" class="uart-wire" marker-end="url(#arrow)"/>
+  
+  <!-- Back ESP32 to Camera ESP32 -->
+  <line x1="520" y1="280" x2="900" y2="200" class="uart-wire" marker-end="url(#arrow)"/>
+  <line x1="520" y1="290" x2="900" y2="210" class="uart-wire" marker-end="url(#arrow)"/>
+  
+  <!-- Sensor Connections -->
+  <!-- Front Ultrasonic to Back ESP32 -->
+  <line x1="580" y1="140" x2="460" y2="250" class="digital-wire"/>
+  <line x1="580" y1="140" x2="460" y2="270" class="digital-wire"/>
+  
+  <!-- Rear Ultrasonic to Back ESP32 -->
+  <line x1="680" y1="600" x2="460" y2="330" class="digital-wire"/>
+  <line x1="680" y1="600" x2="460" y2="340" class="digital-wire"/>
+  
+  <!-- Gas Sensor to Back ESP32 -->
+  <line x1="410" y1="170" x2="460" y2="290" class="analog-wire"/>
+  
+  <!-- Buzzer to Back ESP32 -->
+  <line x1="410" y1="235" x2="460" y2="300" class="digital-wire"/>
+  
+  <!-- Motor Control Lines -->
+  <!-- Back ESP32 to L298N #1 -->
+  <line x1="460" y1="290" x2="600" y2="280" class="motor-wire"/>
+  <line x1="460" y1="300" x2="600" y2="285" class="motor-wire"/>
+  <line x1="460" y1="310" x2="600" y2="290" class="motor-wire"/>
+  
+  <!-- Front ESP32 to L298N #2 -->
+  <line x1="660" y1="420" x2="750" y2="430" class="motor-wire"/>
+  <line x1="660" y1="430" x2="750" y2="435" class="motor-wire"/>
+  <line x1="660" y1="440" x2="750" y2="440" class="motor-wire"/>
+  
+  <!-- L298N to Motors -->
+  <!-- L298N #1 to Front Motors -->
+  <line x1="650" y1="310" x2="525" y2="205" class="motor-wire"/>
+  <line x1="700" y1="310" x2="675" y2="205" class="motor-wire"/>
+  
+  <!-- L298N #2 to Rear Motors -->
+  <line x1="800" y1="460" x2="525" y2="495" class="motor-wire"/>
+  <line x1="850" y1="460" x2="675" y2="495" class="motor-wire"/>
+  
+  <!-- WiFi Communication (dashed lines) -->
+  <line x1="960" y1="190" x2="460" y2="260" stroke="#9C27B0" stroke-width="2" stroke-dasharray="5,5" fill="none"/>
+  <text x="700" y="200" class="legend" fill="#9C27B0">WiFi AP: ProjectNightfall</text>
+  
+  <!-- Current Flow Indicators -->
+  <g id="current-flow">
+    <text x="100" y="650" class="legend">Current Flow:</text>
+    <text x="100" y="670" class="legend">• Idle: 450mA (5V) + 100mA (14.8V)</text>
+    <text x="100" y="690" class="legend">• Normal: 1.3A (5V) + 3.2A (14.8V)</text>
+    <text x="100" y="710" class="legend">• Peak: 1.3A (5V) + 8A (14.8V)</text>
+  </g>
+  
+  <!-- Performance Metrics -->
+  <g id="metrics">
+    <rect x="1000" y="600" width="350" height="200" fill="#f5f5f5" stroke="#333" stroke-width="2" rx="5"/>
+    <text x="1175" y="620" class="subtitle">System Specifications</text>
+    
+    <text x="1020" y="645" class="legend">Power System:</text>
+    <text x="1020" y="660" class="legend">• Battery: 4x 18650 Li-ion (14.8V, 2.5Ah)</text>
+    <text x="1020" y="675" class="legend">• Runtime: 2-3 hours normal operation</text>
+    <text x="1020" y="690" class="legend">• Efficiency: 85% (LM2596)</text>
+    
+    <text x="1020" y="715" class="legend">Communication:</text>
+    <text x="1020" y="730" class="legend">• UART: 115200 baud (Back ↔ Front + Camera)</text>
+    <text x="1020" y="745" class="legend">• WiFi: 802.11n, 2.4GHz, AP mode</text>
+    <text x="1020" y="760" class="legend">• WebSocket: Port 8888, 500ms telemetry</text>
+    
+    <text x="1020" y="785" class="legend">Response Times:</text>
+    <text x="1020" y="800" class="legend">• Emergency Stop: <100ms</text>
+    <text x="1020" y="815" class="legend">• Sensor Update: 100ms</text>
+  </g>
+  
+  <!-- Component Details Tooltip (hidden by default) -->
+  <g id="tooltip" style="display: none;">
+    <rect x="1100" y="100" width="250" height="150" fill="#333" stroke="#fff" stroke-width="1" rx="5"/>
+    <text id="tooltip-title" x="1125" y="120" fill="#fff" font-size="14" font-weight="bold">Component Details</text>
+    <text id="tooltip-content" x="1125" y="140" fill="#fff" font-size="12">Click on components to see details</text>
+  </g>
+  
+  <!-- Interactive JavaScript -->
+  <script type="text/javascript"><![CDATA[
+    function showDetails(componentId) {
+      const details = {
+        'battery-pack': {
+          title: 'Battery Pack (14.8V Li-ion)',
+          content: '4x 18650 cells in series\nCapacity: 2500mAh\nVoltage: 12.0-16.8V\nEnergy: 37Wh\nExpected runtime: 2-3 hours'
+        },
+        'rocker-switch': {
+          title: 'Power Switch',
+          content: 'SPST On/Off switch\nCurrent rating: 10A\nVoltage rating: 24V\nUsed for main power control'
+        },
+        'fuse': {
+          title: 'Main Power Fuse',
+          content: 'Rating: 10A fast-blow\nPurpose: Overcurrent protection\nLocation: Battery positive line\nResponse: <1ms'
+        },
+        'lm2596': {
+          title: 'LM2596 Buck Converter',
+          content: 'Input: 15-40V DC\nOutput: 1.23-37V DC (adjustable)\nCurrent: 3A continuous\nEfficiency: ~85%\nFrequency: 150kHz'
+        },
+        'l298n1': {
+          title: 'L298N Motor Driver #1',
+          content: 'Controls: Front left & right motors\nVoltage: 5-35V\nCurrent: 2A per channel\nPWM: Up to 40kHz\nBuilt-in 5V regulator'
+        },
+        'l298n2': {
+          title: 'L298N Motor Driver #2',
+          content: 'Controls: Rear left & right motors\nVoltage: 5-35V\nCurrent: 2A per channel\nPWM: Up to 40kHz\nThermal protection'
+        },
+        'front-us': {
+          title: 'Front Ultrasonic Sensor',
+          content: 'Model: HC-SR04\nRange: 2-400cm\nAccuracy: ±3mm\nOperating voltage: 5V\nCurrent: 15mA'
+        },
+        'rear-us': {
+          title: 'Rear Ultrasonic Sensor',
+          content: 'Model: HC-SR04\nRange: 2-400cm\nAccuracy: ±3mm\nOperating voltage: 5V\nCurrent: 15mA'
+        },
+        'gas-sensor': {
+          title: 'MQ-2 Gas Sensor',
+          content: 'Detects: LPG, smoke, alcohol, methane\nOperating voltage: 5V\nCurrent: 133mA\nWarm-up time: 24-48 hours\nSensitivity: Adjustable'
+        },
+        'buzzer': {
+          title: 'Active Buzzer',
+          content: 'Operating voltage: 5V\nCurrent: 30mA\nSound level: 70dB\nFrequency: 2.3kHz\nType: Active (self-oscillating)'
+        },
+        'fl-motor': {
+          title: 'Front Left Motor',
+          content: 'Type: DC gear motor\nVoltage: 12V\nSpeed: 500 RPM\nCurrent: 1-2A under load\nTorque: High torque gear reduction'
+        },
+        'fr-motor': {
+          title: 'Front Right Motor',
+          content: 'Type: DC gear motor\nVoltage: 12V\nSpeed: 500 RPM\nCurrent: 1-2A under load\nSynchronized with FL motor'
+        },
+        'rl-motor': {
+          title: 'Rear Left Motor',
+          content: 'Type: DC gear motor\nVoltage: 12V\nSpeed: 500 RPM\nCurrent: 1-2A under load\nSynchronized with RR motor'
+        },
+        'rr-motor': {
+          title: 'Rear Right Motor',
+          content: 'Type: DC gear motor\nVoltage: 12V\nSpeed: 500 RPM\nCurrent: 1-2A under load\nProvides differential drive'
+        }
+      };
+      
+      const detail = details[componentId];
+      if (detail) {
+        document.getElementById('tooltip-title').textContent = detail.title;
+        document.getElementById('tooltip-content').textContent = detail.content;
+        document.getElementById('tooltip').style.display = 'block';
+        
+        // Position tooltip near clicked component
+        const event = window.event;
+        const tooltip = document.getElementById('tooltip');
+        tooltip.setAttribute('transform', `translate(${event.pageX + 10}, ${event.pageY - 50})`);
+      }
+    }
+    
+    // Hide tooltip when clicking elsewhere
+    document.addEventListener('click', function(event) {
+      if (!event.target.closest('.component')) {
+        document.getElementById('tooltip').style.display = 'none';
+      }
+    });
+    
+    // Add hover effects for wires
+    document.querySelectorAll('.wire').forEach(wire => {
+      wire.addEventListener('mouseenter', function() {
+        this.style.strokeWidth = '4';
+      });
+      wire.addEventListener('mouseleave', function() {
+        this.style.strokeWidth = '2';
+      });
+    });
+  ]]></script>
+</svg>

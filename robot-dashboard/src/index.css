@@ -1,0 +1,150 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  
+  * {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply bg-gradient-to-br from-nightfall-primary via-nightfall-secondary to-nightfall-primary text-white;
+    overflow-x: hidden;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 bg-nightfall-accent hover:bg-nightfall-accent/90 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-nightfall-accent focus:ring-offset-2 focus:ring-offset-nightfall-primary;
+  }
+  
+  .btn-secondary {
+    @apply px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-nightfall-primary;
+  }
+  
+  .btn-danger {
+    @apply px-4 py-2 bg-nightfall-error hover:bg-nightfall-error/90 text-white font-semibold rounded-lg transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-nightfall-error focus:ring-offset-2 focus:ring-offset-nightfall-primary;
+  }
+  
+  .card {
+    @apply bg-nightfall-secondary/80 backdrop-blur-sm border border-gray-700 rounded-xl shadow-xl;
+  }
+  
+  .status-indicator {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-sm font-medium;
+  }
+  
+  .status-connected {
+    @apply bg-nightfall-success/20 text-nightfall-success border border-nightfall-success/30;
+  }
+  
+  .status-disconnected {
+    @apply bg-nightfall-error/20 text-nightfall-error border border-nightfall-error/30;
+  }
+  
+  .status-reconnecting {
+    @apply bg-nightfall-warning/20 text-nightfall-warning border border-nightfall-warning/30;
+  }
+  
+  .metric-bar {
+    @apply w-full bg-gray-700 rounded-full h-2 overflow-hidden;
+  }
+  
+  .metric-fill {
+    @apply h-full rounded-full transition-all duration-300;
+  }
+  
+  .control-grid {
+    @apply grid grid-cols-3 gap-3 p-4;
+  }
+  
+  .control-btn {
+    @apply w-20 h-20 rounded-lg font-bold text-lg transition-all duration-200 transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-nightfall-accent focus:ring-offset-2 focus:ring-offset-nightfall-primary;
+  }
+  
+  .control-btn-forward {
+    @apply control-btn bg-nightfall-accent hover:bg-nightfall-accent/90;
+  }
+  
+  .control-btn-back {
+    @apply control-btn bg-nightfall-accent hover:bg-nightfall-accent/90;
+  }
+  
+  .control-btn-left {
+    @apply control-btn bg-nightfall-accent hover:bg-nightfall-accent/90;
+  }
+  
+  .control-btn-right {
+    @apply control-btn bg-nightfall-accent hover:bg-nightfall-accent/90;
+  }
+  
+  .control-btn-stop {
+    @apply control-btn bg-nightfall-error hover:bg-nightfall-error/90;
+  }
+  
+  .control-btn-rotate {
+    @apply control-btn bg-purple-600 hover:bg-purple-700;
+  }
+  
+  .emergency-stop {
+    @apply w-32 h-32 rounded-full bg-nightfall-error hover:bg-nightfall-error/90 text-white font-bold text-sm transition-all duration-200 transform active:scale-95 focus:outline-none focus:ring-4 focus:ring-nightfall-error focus:ring-offset-2 focus:ring-offset-nightfall-primary shadow-2xl animate-pulse-slow;
+  }
+  
+  .hud-overlay {
+    @apply absolute top-4 right-4 bg-black/70 backdrop-blur-sm rounded-lg p-3 border border-gray-600;
+  }
+  
+  .connection-indicator {
+    @apply w-8 h-8 rounded-full border-2 animate-pulse;
+  }
+  
+  .connection-healthy {
+    @apply bg-nightfall-success border-nightfall-success;
+  }
+  
+  .connection-warning {
+    @apply bg-nightfall-warning border-nightfall-warning;
+  }
+  
+  .connection-error {
+    @apply bg-nightfall-error border-nightfall-error;
+  }
+  
+  .robot-status-brain {
+    @apply connection-indicator bg-robot-brain border-robot-brain;
+  }
+  
+  .robot-status-motors {
+    @apply connection-indicator bg-robot-motors border-robot-motors;
+  }
+  
+  .robot-status-vision {
+    @apply connection-indicator bg-robot-vision border-robot-vision;
+  }
+}
+
+@layer utilities {
+  .text-shadow {
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  }
+  
+  .glow {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+  }
+  
+  .glow-green {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+  }
+  
+  .glow-red {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+  }
+  
+  .glow-yellow {
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
+  }
+}
