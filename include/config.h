@@ -32,17 +32,25 @@
 #define BACKUP_DURATION 1000  // ms
 
 // ===== SAFETY THRESHOLDS =====
-#define EMERGENCY_STOP_DISTANCE 20.0  // cm - SAFETY OVERRIDE TRIGGER
-#define GAS_THRESHOLD_ANALOG 400      // ADC value - SAFETY OVERRIDE TRIGGER
+#ifndef EMERGENCY_STOP_DISTANCE
+#define EMERGENCY_STOP_DISTANCE 20.0 // cm - SAFETY OVERRIDE TRIGGER
+#endif
+#ifndef GAS_THRESHOLD_ANALOG
+#define GAS_THRESHOLD_ANALOG 400 // ADC value - SAFETY OVERRIDE TRIGGER
+#endif
 #define LOW_BATTERY_VOLTAGE 12.5      // V
 #define CRITICAL_BATTERY_VOLTAGE 11.5 // V
 #define MAX_TILT_ANGLE 45.0           // degrees
 #define MAX_MOTOR_CURRENT 2.5         // A
 
 // ===== COMMUNICATION =====
-#define UART_BAUDRATE 115200           // baud
-#define WATCHDOG_TIMEOUT 5000          // ms
-#define HEARTBEAT_INTERVAL 1000        // ms
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE 115200 // baud
+#endif
+#define WATCHDOG_TIMEOUT 5000 // ms
+#ifndef HEARTBEAT_INTERVAL
+#define HEARTBEAT_INTERVAL 1000 // ms
+#endif
 #define SENSOR_UPDATE_INTERVAL 100     // ms
 #define NAVIGATION_UPDATE_INTERVAL 100 // ms
 #define TELEMETRY_INTERVAL 500         // ms
@@ -112,9 +120,10 @@
 #define PIN_US_TRIG 4  // HC-SR04 Trigger Pin (5V output from ESP32)
 #define PIN_US_ECHO 36 // HC-SR04 Echo Pin (5V input - REQUIRES 5V->3.3V voltage divider!)
 
-// UART Master - Wiring: TX22->RX22(Front), RX21->TX23(Front)
-#define PIN_UART_TX 22 // UART TX to Front ESP32 Slave
-#define PIN_UART_RX 21 // UART RX from Front ESP32 Slave
+// UART Master - Hardware Serial2 uses GPIO17(TX2)/GPIO16(RX2) - defined in platformio.ini
+// Note: Actual pins defined in platformio.ini build flags
+// #define PIN_UART_TX 17 // Hardware Serial2 TX2 to Front ESP32
+// #define PIN_UART_RX 16 // Hardware Serial2 RX2 from Front ESP32
 
 // Motors (L298N Driver) - Wiring: 6 motor control pins
 #define PIN_MOTOR_1 13 // Motor 1 Control (L298N IN1/ENA)
@@ -128,20 +137,15 @@
 // FRONT SLAVE ESP32 (Slave Controller)
 // Board: ESP32 DevKit V1 - Motor Slave Controller
 #ifdef FRONT_CONTROLLER
-// Motors (2x L298N Drivers) - Wiring: 9 motor control pins
-#define PIN_MOTOR_1 13 // Motor 1 Control (L298N #1 IN1/ENA)
-#define PIN_MOTOR_2 14 // Motor 2 Control (L298N #1 IN2/ENB)
-#define PIN_MOTOR_3 18 // Motor 3 Control (L298N #1 IN3)
-#define PIN_MOTOR_4 19 // Motor 4 Control (L298N #1 IN4)
-#define PIN_MOTOR_5 21 // Motor 5 Control (L298N #2 IN1/ENA)
-#define PIN_MOTOR_6 23 // Motor 6 Control (L298N #2 IN2/ENB)
-#define PIN_MOTOR_7 25 // Motor 7 Control (L298N #2 IN3)
-#define PIN_MOTOR_8 26 // Motor 8 Control (L298N #2 IN4)
-#define PIN_MOTOR_9 27 // Motor 9 Control (L298N #2 PWM/ENB)
+// Motors (2x L298N Drivers) - Wiring: 12 motor control pins for 2 drivers
+// Pins are hardcoded in main_front_enhanced.cpp to match wiring guide
+// Driver 1: GPIO 13,23,22,25,26,27
+// Driver 2: GPIO 14,32,33,18,19,21
 
-// UART Slave - Wiring: RX22<-TX22(Rear), TX23->RX21(Rear)
-#define PIN_UART_RX 22 // UART RX from Rear ESP32 Master
-#define PIN_UART_TX 23 // UART TX to Rear ESP32 Master
+// UART Slave - Hardware Serial2 uses GPIO16(RX2)/GPIO17(TX2) - cannot be remapped
+// Note: Actual pins defined in platformio.ini build flags
+// #define PIN_UART_RX 16 // Hardware Serial2 RX2 from Rear ESP32 Master
+// #define PIN_UART_TX 17 // Hardware Serial2 TX2 to Rear ESP32 Master
 #endif
 
 // ESP32-CAM (Vision Module)

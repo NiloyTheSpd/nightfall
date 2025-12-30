@@ -22,12 +22,14 @@
 #include <ArduinoJson.hpp>
 #include <ESPAsyncWebServer.h>
 
-// Define controller type for conditional compilation BEFORE including pins.h
-#define REAR_CONTROLLER
+// Note: REAR_CONTROLLER defined in platformio.ini build flags
 
 // Include our libraries
 #include "config.h"
 #include "pins.h"
+
+// Forward declarations
+void stopAllRearMotors();
 
 // Global objects
 AsyncWebServer webServer(80);
@@ -293,7 +295,7 @@ function sendCommand(cmd){ws.send(JSON.stringify({command: cmd}));}
     // Enhanced API endpoints
     webServer.on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request)
                  {
-        DynamicJsonDocument doc(512);
+        JsonDocument doc;
         doc["status"] = "online";
         doc["version"] = VERSION_STRING;
         doc["uptime"] = millis();
@@ -317,7 +319,7 @@ function sendCommand(cmd){ws.send(JSON.stringify({command: cmd}));}
 
     webServer.on("/api/motors", HTTP_GET, [](AsyncWebServerRequest *request)
                  {
-        DynamicJsonDocument doc(256);
+        JsonDocument doc;
         doc["frontLeft"] = frontLeftSpeed;
         doc["frontRight"] = frontRightSpeed;
         doc["rearLeft"] = rearLeftSpeed;
@@ -516,7 +518,7 @@ void updateMotorControl()
 void sendMotorCommandsToFront()
 {
     // Send motor commands to Front ESP32 via UART
-    StaticJsonDocument<256> motorDoc;
+    JsonDocument motorDoc;
     motorDoc["L"] = targetFrontLeftSpeed;
     motorDoc["R"] = targetFrontRightSpeed;
     motorDoc["CL"] = targetCenterLeftSpeed;  // Center left motor
@@ -539,10 +541,10 @@ void handleUARTCommunication()
 
         if (message.length() > 0)
         {
-            DynamicJsonDocument doc(256);
+            JsonDocument doc;
             DeserializationError error = deserializeJson(doc, message);
 
-            if (!error && doc.containsKey("type"))
+            if (!error && doc["type"].is<const char *>())
             {
                 if (doc["type"] == "heartbeat")
                 {
@@ -616,7 +618,7 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t l
         DEBUG_PRINT(": ");
         DEBUG_PRINTLN(message);
 
-        DynamicJsonDocument doc(512);
+        JsonDocument doc;
         DeserializationError error = deserializeJson(doc, message);
 
         if (error)
@@ -625,7 +627,7 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t l
             return;
         }
 
-        if (doc.containsKey("command"))
+        if (doc["command"].is<const char *>())
         {
             processDriveCommand(doc);
         }
@@ -826,7 +828,7 @@ void sendStatusToWebSocket()
 
 String formatTelemetryJSON()
 {
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     doc["type"] = "telemetry";
     doc["timestamp"] = millis();
     doc["dist"] = frontDistance;
@@ -848,7 +850,7 @@ String formatTelemetryJSON()
 
 String formatStatusJSON()
 {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "status";
     doc["status"] = emergencyStop ? "emergency" : "normal";
     doc["ready"] = systemReady;

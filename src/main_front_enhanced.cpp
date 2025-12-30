@@ -19,8 +19,7 @@
 #include <ArduinoJson.h>
 #include <ArduinoJson.hpp>
 
-// Define controller type for conditional compilation BEFORE including pins.h
-#define FRONT_CONTROLLER
+// Note: FRONT_CONTROLLER defined in platformio.ini build flags
 
 // Include our libraries
 #include "config.h"
@@ -198,7 +197,7 @@ void listenForUARTCommands()
 void processMotorCommand(const String &command)
 {
     // Parse JSON command: {"L": val, "R": val, "CL": val, "CR": val}
-    DynamicJsonDocument doc(256);
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, command);
 
     if (error)
@@ -208,17 +207,17 @@ void processMotorCommand(const String &command)
     }
 
     // Extract motor speeds
-    if (doc.containsKey("L") && doc.containsKey("R"))
+    if (doc["L"].is<int>() && doc["R"].is<int>())
     {
         targetFrontLeftSpeed = doc["L"];
         targetFrontRightSpeed = doc["R"];
 
         // Handle center motors if present
-        if (doc.containsKey("CL"))
+        if (doc["CL"].is<int>())
         {
             targetCenterLeftSpeed = doc["CL"];
         }
-        if (doc.containsKey("CR"))
+        if (doc["CR"].is<int>())
         {
             targetCenterRightSpeed = doc["CR"];
         }
@@ -238,7 +237,7 @@ void processMotorCommand(const String &command)
         DEBUG_PRINT(", Center R: ");
         DEBUG_PRINTLN(targetCenterRightSpeed);
     }
-    else if (doc.containsKey("cmd"))
+    else if (doc["cmd"].is<const char *>())
     {
         String cmd = doc["cmd"];
 
@@ -442,7 +441,7 @@ void stopAllMotors()
 void sendHeartbeat()
 {
     // Send status back to Rear ESP32 via Serial2
-    StaticJsonDocument<256> heartbeatDoc;
+    JsonDocument heartbeatDoc;
     heartbeatDoc["type"] = "heartbeat";
     heartbeatDoc["source"] = "front";
     heartbeatDoc["timestamp"] = millis();
