@@ -5,13 +5,13 @@
  * @version 2.0.0
  * @date    December 29, 2025
  *
- * Master controller for the autonomous rescue robot. Handles:
+ * Master controller for the manual rescue robot. Handles:
  * - WiFi Access Point creation (ProjectNightfall/rescue2025)
  * - WebSocket Server on port 8888 for Dashboard communication
- * - Safety override system (Distance < 20cm OR Gas > 400)
+ * - Safety override system (Distance < 20cm OR Gas/Smoke > threshold)
  * - Telemetry broadcasting every 500ms
  * - Motor control and UART communication to Front ESP32
- * - Sensor fusion (2x Ultrasonic + Gas Sensor)
+ * - Sensor monitoring (2x Ultrasonic + Gas + Smoke Sensors)
  */
 
 #include <Arduino.h>
@@ -50,6 +50,7 @@ int targetRightSpeed = 0;
 float frontDistance = 0.0;
 float rearDistance = 0.0;
 int gasLevel = 0;
+int smokeLevel = 0;
 float batteryVoltage = 14.8;
 unsigned long uptime = 0;
 
@@ -134,6 +135,9 @@ void initializeHardware()
     pinMode(19, OUTPUT); // Rear US Trig
     pinMode(21, INPUT);  // Rear US Echo
     pinMode(32, INPUT);  // Gas Sensor Analog
+    pinMode(33, INPUT);  // Gas Sensor Digital
+    pinMode(12, INPUT);  // Smoke Sensor Analog
+    pinMode(13, INPUT);  // Smoke Sensor Digital
     pinMode(4, OUTPUT);  // Buzzer
 
     // Initialize UART pins
@@ -197,6 +201,7 @@ body{font-family:Arial;margin:20px;background:#1a1a1a;color:#fff}
 <div class='telemetry'>Front Distance: <span id='frontDistance'>0</span> cm</div>
 <div class='telemetry'>Rear Distance: <span id='rearDistance'>0</span> cm</div>
 <div class='telemetry'>Gas Level: <span id='gasLevel'>0</span></div>
+<div class='telemetry'>Smoke Level: <span id='smokeLevel'>0</span></div>
 <div class='telemetry'>Battery: <span id='battery'>14.8</span> V</div></div>
 <div class='card'><h2>Manual Control</h2>
 <button class='button' onclick='sendCommand("forward")'>⬆️ Forward</button>
@@ -205,9 +210,7 @@ body{font-family:Arial;margin:20px;background:#1a1a1a;color:#fff}
 <button class='button' onclick='sendCommand("backward")'>⬇️ Backward</button>
 <button class='button' onclick='sendCommand("stop")'>⏹️ Stop</button>
 <button class='button emergency' onclick='sendCommand("emergency")'>🚨 Emergency Stop</button></div>
-<div class='card'><h2>Autonomous Mode</h2>
-<button class='button' onclick='sendCommand("autonomous_start")'>🤖 Start Autonomous</button>
-<button class='button' onclick='sendCommand("autonomous_stop")'>⏸️ Stop Autonomous</button></div>
+
 </div>
 <script>
 var ws = new WebSocket('ws://192.168.4.1:8888');
@@ -218,6 +221,7 @@ if(data.type === 'telemetry'){
 document.getElementById('frontDistance').textContent = data.dist;
 document.getElementById('rearDistance').textContent = data.rearDist;
 document.getElementById('gasLevel').textContent = data.gas;
+document.getElementById('smokeLevel').textContent = data.smoke;
 document.getElementById('battery').textContent = data.battery;
 document.getElementById('uptime').textContent = Math.floor(data.uptime/1000) + 's';
 document.getElementById('emergency').textContent = data.emergency ? 'YES' : 'NO';
@@ -331,8 +335,11 @@ void updateSensors()
 
 void checkSafetyConditions()
 {
-    // SAFETY OVERRIDE: If (FrontDistance < 20cm) OR (Gas > 400), MUST override commands
-    if (!emergencyStop && (frontDistance < EMERGENCY_STOP_DISTANCE || gasLevel > GAS_THRESHOLD_ANALOG))
+    // Read smoke sensor
+    int smokeLevel = analogRead(PIN_SMOKE_ANALOG);
+
+    // SAFETY OVERRIDE: If (FrontDistance < 20cm) OR (Gas > threshold) OR (Smoke > threshold), MUST override commands
+    if (!emergencyStop && (frontDistance < EMERGENCY_STOP_DISTANCE || gasLevel > GAS_THRESHOLD_ANALOG || smokeLevel > 300))
     {
         String reason = "";
         if (frontDistance < EMERGENCY_STOP_DISTANCE)
@@ -344,6 +351,12 @@ void checkSafetyConditions()
             if (reason.length() > 0)
                 reason += " & ";
             reason += "Gas level critical: " + String(gasLevel);
+        }
+        if (smokeLevel > 300)
+        {
+            if (reason.length() > 0)
+                reason += " & ";
+            reason += "Smoke detected: " + String(smokeLevel);
         }
 
         activateEmergencyStop(reason);
@@ -506,17 +519,6 @@ void processDriveCommand(const JsonDocument &doc)
     {
         deactivateEmergencyStop();
     }
-    else if (command == "autonomous_start")
-    {
-        DEBUG_PRINTLN("Autonomous mode not implemented in MVP");
-        // Future implementation
-    }
-    else if (command == "autonomous_stop")
-    {
-        targetLeftSpeed = 0;
-        targetRightSpeed = 0;
-        DEBUG_PRINTLN("Autonomous mode stopped");
-    }
 }
 
 void activateEmergencyStop(const String &reason)
@@ -596,6 +598,7 @@ String formatTelemetryJSON()
     doc["dist"] = frontDistance;
     doc["rearDist"] = rearDistance;
     doc["gas"] = gasLevel;
+    doc["smoke"] = smokeLevel;
     doc["battery"] = batteryVoltage;
     doc["uptime"] = uptime;
     doc["emergency"] = emergencyStop;

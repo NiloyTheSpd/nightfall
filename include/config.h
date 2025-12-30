@@ -113,8 +113,10 @@
 #define PIN_US_TRIG 26 // Front Ultrasonic Trigger
 #define PIN_US_ECHO 27 // Front Ultrasonic Echo
 
-#define PIN_GAS_ANALOG 32  // MQ-2 Gas Sensor Analog
-#define PIN_GAS_DIGITAL 33 // MQ-2 Gas Sensor Digital
+#define PIN_GAS_ANALOG 32    // MQ-2 Gas Sensor Analog
+#define PIN_GAS_DIGITAL 33   // MQ-2 Gas Sensor Digital
+#define PIN_SMOKE_ANALOG 12  // Smoke Sensor Analog
+#define PIN_SMOKE_DIGITAL 13 // Smoke Sensor Digital
 
 #define PIN_BUZZER 13 // Audio Alert
 
@@ -126,18 +128,26 @@
 
 // ESP32 #2 (Rear/Slave Controller) - GPIO pins
 #ifdef REAR_CONTROLLER
-#define PIN_MOTOR_ENA 18 // Rear Left Motor PWM
-#define PIN_MOTOR_IN1 19 // Rear Left Motor Forward
-#define PIN_MOTOR_IN2 21 // Rear Left Motor Reverse
-#define PIN_MOTOR_ENB 22 // Rear Right Motor PWM
-#define PIN_MOTOR_IN3 23 // Rear Right Motor Forward
-#define PIN_MOTOR_IN4 25 // Rear Right Motor Reverse
+#define MOTOR3_ENA 18 // Rear Left Motor PWM (Motor 3)
+#define MOTOR3_IN1 19 // Rear Left Motor Forward
+#define MOTOR3_IN2 21 // Rear Left Motor Reverse
+#define MOTOR4_ENA 32 // Rear Left Motor PWM (Motor 4)
+#define MOTOR4_IN1 33 // Rear Left Motor Forward
+#define MOTOR4_IN2 35 // Rear Left Motor Reverse
 
-#define PIN_US_TRIG 26 // Rear Ultrasonic Trigger
-#define PIN_US_ECHO 27 // Rear Ultrasonic Echo
+#define FRONT_ULTRASONIC_TRIG 14 // Front US Trig
+#define FRONT_ULTRASONIC_ECHO 18 // Front US Echo
+#define REAR_ULTRASONIC_TRIG 19  // Rear US Trig
+#define REAR_ULTRASONIC_ECHO 21  // Rear US Echo
 
-#define PIN_UART2_TX 16 // UART2 TX to Front ESP32
-#define PIN_UART2_RX 17 // UART2 RX from Front ESP32
+#define GAS_SENSOR_ANALOG 32    // Gas Sensor Analog
+#define GAS_SENSOR_DIGITAL 33   // Gas Sensor Digital
+#define SMOKE_SENSOR_ANALOG 12  // Smoke Sensor Analog
+#define SMOKE_SENSOR_DIGITAL 13 // Smoke Sensor Digital
+#define BUZZER_PIN 4            // Buzzer
+
+#define UART_TX 16 // UART TX to Front ESP32
+#define UART_RX 17 // UART RX from Front ESP32
 #endif
 
 // ESP32-CAM (Vision Module) - GPIO pins
@@ -155,14 +165,10 @@ enum RobotState
 {
     STATE_INIT = 0,
     STATE_IDLE,
-    STATE_AUTONOMOUS,
     STATE_MANUAL,
     STATE_FORWARD,
-    STATE_AVOIDING,
     STATE_TURNING,
-    STATE_CLIMBING,
     STATE_BACKING_UP,
-    STATE_SCANNING,
     STATE_EMERGENCY,
     STATE_SHUTDOWN
 };
@@ -178,30 +184,22 @@ enum MessageType
     MSG_TELEMETRY
 };
 
-// ===== NAVIGATION STATES =====
-enum NavigationState
+// ===== MANUAL CONTROL STATES =====
+enum ControlState
 {
-    NAV_INIT = 0,
-    NAV_FORWARD,
-    NAV_AVOID,
-    NAV_TURN,
-    NAV_CLIMB,
-    NAV_BACKUP,
-    NAV_SCAN,
-    NAV_STUCK
+    CONTROL_INIT = 0,
+    CONTROL_READY,
+    CONTROL_ACTIVE,
+    CONTROL_STOPPED
 };
 
-// ===== ML CLASSES =====
-enum MLObjectClass
+// ===== SENSOR CLASSES =====
+enum SensorType
 {
-    ML_WALL = 0,
-    ML_PERSON,
-    ML_STAIRS,
-    ML_DOOR,
-    ML_FURNITURE,
-    ML_DEBRIS,
-    ML_VEHICLE,
-    ML_UNKNOWN
+    SENSOR_ULTRASONIC_FRONT = 0,
+    SENSOR_ULTRASONIC_REAR,
+    SENSOR_GAS,
+    SENSOR_SMOKE
 };
 
 // ===== ALERT TYPES =====
