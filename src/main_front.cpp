@@ -33,21 +33,45 @@ int rightMotorSpeed = 0;
 int targetLeftSpeed = 0;
 int targetRightSpeed = 0;
 
-// Motor driver 1 (Front)
-const int MOTOR1_LEFT_PWM = 13;
-const int MOTOR1_LEFT_IN1 = 23;
-const int MOTOR1_LEFT_IN2 = 22;
-const int MOTOR1_RIGHT_PWM = 25;
-const int MOTOR1_RIGHT_IN1 = 26;
-const int MOTOR1_RIGHT_IN2 = 27;
+// Motor driver 1 (Front) - fall back to defaults if not provided via build flags
+#ifndef MOTOR1_LEFT_PWM
+#define MOTOR1_LEFT_PWM 13
+#endif
+#ifndef MOTOR1_LEFT_IN1
+#define MOTOR1_LEFT_IN1 23
+#endif
+#ifndef MOTOR1_LEFT_IN2
+#define MOTOR1_LEFT_IN2 22
+#endif
+#ifndef MOTOR1_RIGHT_PWM
+#define MOTOR1_RIGHT_PWM 25
+#endif
+#ifndef MOTOR1_RIGHT_IN1
+#define MOTOR1_RIGHT_IN1 26
+#endif
+#ifndef MOTOR1_RIGHT_IN2
+#define MOTOR1_RIGHT_IN2 27
+#endif
 
-// Motor driver 2 (Front Aux)
-const int MOTOR2_LEFT_PWM = 14;
-const int MOTOR2_LEFT_IN1 = 32;
-const int MOTOR2_LEFT_IN2 = 33;
-const int MOTOR2_RIGHT_PWM = 15;
-const int MOTOR2_RIGHT_IN1 = 19;
-const int MOTOR2_RIGHT_IN2 = 21;
+// Motor driver 2 (Front Aux) - fall back to defaults if not provided via build flags
+#ifndef MOTOR2_LEFT_PWM
+#define MOTOR2_LEFT_PWM 14
+#endif
+#ifndef MOTOR2_LEFT_IN1
+#define MOTOR2_LEFT_IN1 32
+#endif
+#ifndef MOTOR2_LEFT_IN2
+#define MOTOR2_LEFT_IN2 33
+#endif
+#ifndef MOTOR2_RIGHT_PWM
+#define MOTOR2_RIGHT_PWM 15
+#endif
+#ifndef MOTOR2_RIGHT_IN1
+#define MOTOR2_RIGHT_IN1 19
+#endif
+#ifndef MOTOR2_RIGHT_IN2
+#define MOTOR2_RIGHT_IN2 21
+#endif
 
 // Function declarations
 void setup();

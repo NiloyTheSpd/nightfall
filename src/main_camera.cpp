@@ -36,9 +36,10 @@ unsigned long lastLEDUpdate = 0;
 bool flashLEDState = false;
 bool statusLEDState = false;
 
-// WiFi configuration
+// WiFi configuration (primary: connect to Master AP; fallback: create AP)
 const char *ssid = "ProjectNightfall";
 const char *password = "rescue2025";
+const unsigned long wifi_connect_timeout_ms = 10000;
 
 // WebSocket configuration
 const char *websocket_host = "192.168.4.1";
@@ -49,6 +50,7 @@ void setup();
 void loop();
 void initializeHardware();
 void setupWiFi();
+void startFallbackAP();
 void setupWebSocket();
 void handleMainLoop();
 void checkConnections();
@@ -130,7 +132,7 @@ void setupWiFi()
     DEBUG_PRINT("Connecting to WiFi");
 
     unsigned long startTime = millis();
-    while (WiFi.status() != WL_CONNECTED && (millis() - startTime < 10000))
+    while (WiFi.status() != WL_CONNECTED && (millis() - startTime < wifi_connect_timeout_ms))
     {
         delay(500);
         DEBUG_PRINT(".");
@@ -165,7 +167,7 @@ void setupWiFi()
     {
         wifiConnected = false;
         DEBUG_PRINTLN();
-        DEBUG_PRINTLN("WiFi connection failed!");
+        DEBUG_PRINTLN("WiFi connection failed! (STA only)");
 
         // Blink status LED to indicate error
         for (int i = 0; i < 6; i++)
@@ -374,7 +376,6 @@ void updateLEDs()
 {
     unsigned long now = millis();
 
-    // Update Flash LED (turn off after 500ms if activated)
     if (flashLEDState && (now - lastLEDUpdate >= 500))
     {
         flashLEDState = false;

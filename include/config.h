@@ -57,7 +57,7 @@
 #define CAMERA_QUALITY 10 // JPEG quality (1-63, lower = better)
 
 // ===== WEB DASHBOARD =====
-#define WEBSOCKET_PORT 81
+#define WEBSOCKET_PORT 8888
 #define HTTP_PORT 80
 #define MAX_WEBSOCKET_CLIENTS 4
 #define DASHBOARD_UPDATE_INTERVAL 100 // ms
@@ -76,7 +76,7 @@
 
 // ===== DATA LOGGING =====
 #define LOGGING_ENABLED true
-#define TELEMETRY_INTERVAL 1000 // ms
+#define TELEMETRY_INTERVAL 500 // ms
 #define SD_CARD_ENABLED true
 #define MAX_LOG_FILE_SIZE 10485760 // 10MB
 
