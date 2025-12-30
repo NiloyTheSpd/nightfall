@@ -6,29 +6,17 @@ import {
   Battery,
   AlertTriangle,
   Wind,
-  Navigation,
   Power,
   Activity,
   Wifi,
   WifiOff,
   Circle,
-  Square,
   ArrowUp,
   ArrowDown,
   ArrowLeft,
   ArrowRight,
   RotateCw,
   StopCircle,
-  MapPin,
-  Play,
-  Pause,
-  Trash2,
-  Save,
-  Upload,
-  Download,
-  Target,
-  CheckCircle,
-  AlertCircle,
   Cpu,
   Eye,
   Zap,
@@ -37,7 +25,8 @@ import {
   Settings,
   Maximize2,
   BarChart3,
-  Info
+  Info,
+  AlertCircle
 } from 'lucide-react';
 
 // Import new components
@@ -49,7 +38,7 @@ import DataExportPanel from './components/DataExportPanel';
 import Tooltip from './components/Tooltip';
 
 // Enhanced Mission Control Dashboard for Project Nightfall Rescue Robot
-// Features: Real WebSocket client, Three-zone layout, Performance monitoring, Error handling
+// Features: Real WebSocket client, Manual control, Performance monitoring, Error handling
 
 // WebSocket connection states
 const ConnectionStates = {
@@ -67,29 +56,6 @@ const SystemStatus = {
   CRITICAL: 'critical',
   OFFLINE: 'offline'
 };
-
-// Types for better TypeScript-like development
-/**
- * @typedef {Object} TelemetryData
- * @property {string} back_status - Status of rear ESP32
- * @property {boolean} front_status - Status of front ESP32 
- * @property {boolean} camera_status - Status of camera ESP32
- * @property {number} dist - Distance reading in cm
- * @property {number} gas - Gas level (0-4095)
- * @property {string} cam_ip - Camera IP address
- * @property {number} battery - Battery voltage
- * @property {number} signal_strength - WiFi signal strength
- * @property {number} uptime - System uptime in seconds
- */
-
-/**
- * @typedef {Object} Waypoint
- * @property {number} id - Unique identifier
- * @property {number} x - X coordinate
- * @property {number} y - Y coordinate  
- * @property {string} name - Waypoint name
- * @property {string} [action] - Action to perform
- */
 
 export default function DashboardEnhanced() {
   // --- State for new features ---
@@ -125,6 +91,7 @@ export default function DashboardEnhanced() {
   const [connectionState, setConnectionState] = useState(ConnectionStates.DISCONNECTED);
   const [lastError, setLastError] = useState(null);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const reconnectAttemptsRef = useRef(0);
   const [connectionStats, setConnectionStats] = useState({
     messagesSent: 0,
     messagesReceived: 0,
@@ -139,8 +106,8 @@ export default function DashboardEnhanced() {
     camera_status: false,
     dist: 0,
     gas: 0,
-    cam_ip: '192.168.4.3',
-    battery: 14.8,
+    cam_ip: '192.168.4.1/stream',
+    battery: 11.1,
     signal_strength: 0,
     uptime: 0
   });
@@ -154,18 +121,7 @@ export default function DashboardEnhanced() {
 
   // --- Motor control state ---
   const [motorState, setMotorState] = useState({ left: 0, right: 0 });
-  const [commandQueue, setCommandQueue] = useState([]);
   const [lastCommand, setLastCommand] = useState(null);
-
-  // --- Mission and navigation state ---
-  const [mode, setMode] = useState('manual');
-  const [robotState, setRobotState] = useState('IDLE');
-  const [waypoints, setWaypoints] = useState([]);
-  const [currentWaypoint, setCurrentWaypoint] = useState(0);
-  const [isNavigating, setIsNavigating] = useState(false);
-  const [isPaused, setIsPaused] = useState(false); // Moved before functions that use it
-  const [robotPosition, setRobotPosition] = useState({ x: 400, y: 200 });
-  const canvasRef = useRef(null);
 
   // --- Performance monitoring ---
   const [performanceMetrics, setPerformanceMetrics] = useState({
@@ -186,6 +142,7 @@ export default function DashboardEnhanced() {
   const reconnectTimeoutRef = useRef(null);
   const pingIntervalRef = useRef(null);
   const fpsCounterRef = useRef({ frames: 0, lastTime: Date.now() });
+  const isConnectingRef = useRef(false);
 
   // --- Constants ---
   const WEBSOCKET_URL = 'ws://192.168.4.1:8888';
@@ -240,11 +197,15 @@ export default function DashboardEnhanced() {
 
   // --- WebSocket connection management ---
   const connectWebSocket = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      return; // Already connected
+    // Prevent multiple simultaneous connection attempts
+    if (isConnectingRef.current || wsRef.current?.readyState === WebSocket.OPEN) {
+      return;
     }
 
+    isConnectingRef.current = true;
+    
     try {
+      console.log('[DEBUG] Attempting to connect to:', WEBSOCKET_URL);
       setConnectionState(ConnectionStates.CONNECTING);
       setLastError(null);
 
@@ -252,9 +213,11 @@ export default function DashboardEnhanced() {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('WebSocket connected to robot');
+        console.log('[DEBUG] WebSocket connected successfully');
+        isConnectingRef.current = false;
         setConnectionState(ConnectionStates.CONNECTED);
         setReconnectAttempts(0);
+        reconnectAttemptsRef.current = 0;
         addAlert('Connected to robot successfully', 'success');
         
         // Start ping interval for latency measurement
@@ -313,7 +276,8 @@ export default function DashboardEnhanced() {
       };
 
       ws.onclose = (event) => {
-        console.log('WebSocket closed:', event.code, event.reason);
+        console.log('[DEBUG] WebSocket closed:', event.code, event.reason);
+        isConnectingRef.current = false;
         setConnectionState(ConnectionStates.DISCONNECTED);
         
         // Clear intervals
@@ -323,28 +287,30 @@ export default function DashboardEnhanced() {
         }
 
         // Auto-reconnect with exponential backoff
-        if (reconnectAttempts < RECONNECT_DELAYS.length) {
+        if (reconnectAttemptsRef.current < RECONNECT_DELAYS.length) {
           setConnectionState(ConnectionStates.RECONNECTING);
-          const delay = RECONNECT_DELAYS[reconnectAttempts];
+          const delay = RECONNECT_DELAYS[reconnectAttemptsRef.current];
           
-          addAlert(`Reconnecting in ${delay/1000}s...`, 'warning', delay);
+          addAlert(`Reconnecting in ${delay/1000}s... (attempt ${reconnectAttemptsRef.current + 1}/4)`, 'warning', delay);
           
           reconnectTimeoutRef.current = setTimeout(() => {
-            setReconnectAttempts(prev => prev + 1);
+            reconnectAttemptsRef.current += 1;
+            setReconnectAttempts(reconnectAttemptsRef.current);
             connectWebSocket();
           }, delay);
         } else {
-          addAlert('Failed to reconnect to robot. Please check connection.', 'error');
+          addAlert('Failed to reconnect to robot. Please check if robot is powered on and WebSocket server is running.', 'error');
         }
       };
 
     } catch (error) {
-      console.error('Failed to create WebSocket:', error);
+      console.error('[DEBUG] Failed to create WebSocket:', error);
+      isConnectingRef.current = false;
       setConnectionState(ConnectionStates.ERROR);
       setLastError(error.message);
-      addAlert('Failed to establish connection', 'error');
+      addAlert('Failed to establish connection. Is the robot powered on?', 'error');
     }
-  }, [addAlert, reconnectAttempts, updateSystemHealth]);
+  }, [addAlert, updateSystemHealth]);
 
   // --- Command transmission ---
   const sendMotorCommand = useCallback((left, right) => {
@@ -387,16 +353,12 @@ export default function DashboardEnhanced() {
   const rotateClockwise = useCallback(() => sendMotorCommand(140, -140), [sendMotorCommand]);
   const emergencyStop = useCallback(() => {
     sendMotorCommand(0, 0);
-    setMode('manual');
-    setRobotState('EMERGENCY');
     addAlert('EMERGENCY STOP ACTIVATED', 'error', 0);
   }, [sendMotorCommand, addAlert]);
 
   // --- Keyboard controls ---
   useEffect(() => {
     const handleKeyPress = (event) => {
-      if (mode === 'autonomous') return;
-      
       switch (event.key.toLowerCase()) {
         case 'w':
         case 'arrowup':
@@ -434,15 +396,7 @@ export default function DashboardEnhanced() {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [mode, moveForward, moveBackward, turnLeft, turnRight, emergencyStop, rotateClockwise]);
-
-  // --- Mode management ---
-  const toggleMode = useCallback(() => {
-    const newMode = mode === 'manual' ? 'autonomous' : 'manual';
-    setMode(newMode);
-    setRobotState(newMode === 'autonomous' ? 'AUTONOMOUS' : 'IDLE');
-    addAlert(`Switched to ${newMode.toUpperCase()} mode`, 'success');
-  }, [mode, addAlert]);
+  }, [moveForward, moveBackward, turnLeft, turnRight, emergencyStop, rotateClockwise]);
 
   // --- Connection lifecycle ---
   useEffect(() => {
@@ -539,200 +493,6 @@ export default function DashboardEnhanced() {
     return 'text-red-400';
   };
 
-  // --- Waypoint management functions ---
-  const addWaypoint = useCallback((x, y, name) => {
-    const waypoint = {
-      id: Date.now() + Math.round(Math.random() * 999),
-      x,
-      y,
-      name: name || `WP${waypoints.length + 1}`,
-      action: 'navigate'
-    };
-    setWaypoints(prev => [...prev, waypoint]);
-    addAlert(`Waypoint added: ${waypoint.name}`, 'info');
-  }, [waypoints.length, addAlert]);
-
-  const removeWaypoint = useCallback((id) => {
-    setWaypoints(prev => prev.filter(w => w.id !== id));
-    addAlert('Waypoint removed', 'info');
-  }, [addAlert]);
-
-  const clearWaypoints = useCallback(() => {
-    setWaypoints([]);
-    setCurrentWaypoint(0);
-    setIsNavigating(false);
-    addAlert('All waypoints cleared', 'info');
-  }, [addAlert]);
-
-  const startMission = useCallback(() => {
-    if (waypoints.length === 0) {
-      addAlert('No waypoints to navigate', 'error');
-      return;
-    }
-    setIsNavigating(true);
-    setIsPaused(false);
-    setCurrentWaypoint(0);
-    addAlert('Mission started', 'success');
-  }, [waypoints.length, addAlert]);
-
-  const pauseMission = useCallback(() => {
-    if (!isNavigating) return;
-    setIsPaused(prev => !prev);
-    addAlert(isPaused ? 'Mission resumed' : 'Mission paused', 'info');
-  }, [isNavigating, isPaused, addAlert]);
-
-  const stopMission = useCallback(() => {
-    setIsNavigating(false);
-    setIsPaused(false);
-    setCurrentWaypoint(0);
-    addAlert('Mission stopped', 'info');
-  }, [addAlert]);
-
-  // --- Canvas click handler ---
-  const handleCanvasClick = useCallback((e) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * (canvas.width / rect.width);
-    const y = (e.clientY - rect.top) * (canvas.height / rect.height);
-    
-    addWaypoint(x, y);
-  }, [addWaypoint]);
-
-  // Mission navigation simulation - isPaused state moved to line 166
-
-  useEffect(() => {
-    if (!isNavigating || isPaused || waypoints.length === 0) return;
-
-    const interval = setInterval(() => {
-      if (currentWaypoint < waypoints.length) {
-        const target = waypoints[currentWaypoint];
-        setRobotPosition(prev => {
-          const dx = target.x - prev.x;
-          const dy = target.y - prev.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          
-          if (dist < 10) {
-            setCurrentWaypoint(curr => {
-              if (curr + 1 >= waypoints.length) {
-                setIsNavigating(false);
-                addAlert('Mission completed!', 'success');
-                return curr;
-              }
-              return curr + 1;
-            });
-            return prev;
-          }
-          
-          const speed = 1.5;
-          const r = speed / dist;
-          return { x: prev.x + dx * r, y: prev.y + dy * r };
-        });
-      }
-    }, 50);
-
-    return () => clearInterval(interval);
-  }, [isNavigating, isPaused, waypoints, currentWaypoint, addAlert]);
-
-  // Mission map rendering
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width;
-    const h = canvas.height;
-
-    // Clear canvas
-    ctx.clearRect(0, 0, w, h);
-
-    // Background grid
-    ctx.fillStyle = '#0b1220';
-    ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = '#122033';
-    ctx.lineWidth = 1;
-    
-    for (let i = 0; i <= w; i += 40) {
-      ctx.beginPath();
-      ctx.moveTo(i, 0);
-      ctx.lineTo(i, h);
-      ctx.stroke();
-    }
-    
-    for (let i = 0; i <= h; i += 40) {
-      ctx.beginPath();
-      ctx.moveTo(0, i);
-      ctx.lineTo(w, i);
-      ctx.stroke();
-    }
-
-    // Draw path
-    if (waypoints.length > 0) {
-      ctx.strokeStyle = '#54a0ff';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([6, 6]);
-      ctx.beginPath();
-      ctx.moveTo(robotPosition.x, robotPosition.y);
-      waypoints.forEach((wp, idx) => {
-        if (idx >= currentWaypoint) ctx.lineTo(wp.x, wp.y);
-      });
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    // Draw waypoints
-    waypoints.forEach((wp, idx) => {
-      if (idx < currentWaypoint) {
-        ctx.fillStyle = '#27ae60';
-        ctx.strokeStyle = '#27ae60';
-      } else if (idx === currentWaypoint) {
-        ctx.fillStyle = '#f39c12';
-        ctx.strokeStyle = '#f39c12';
-      } else {
-        ctx.fillStyle = '#3498db';
-        ctx.strokeStyle = '#3498db';
-      }
-      
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(wp.x, wp.y, 8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      // Waypoint labels
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 10px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText((idx + 1).toString(), wp.x, wp.y);
-    });
-
-    // Draw robot
-    ctx.save();
-    ctx.translate(robotPosition.x, robotPosition.y);
-    ctx.fillStyle = '#e74c3c';
-    ctx.beginPath();
-    ctx.arc(0, 0, 12, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Robot direction indicator
-    if (waypoints.length > currentWaypoint) {
-      const target = waypoints[currentWaypoint];
-      const angle = Math.atan2(target.y - robotPosition.y, target.x - robotPosition.x);
-      ctx.rotate(angle);
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.moveTo(12, 0);
-      ctx.lineTo(6, -4);
-      ctx.lineTo(6, 4);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.restore();
-
-  }, [waypoints, robotPosition, currentWaypoint]);
-
   const connectionStatus = getConnectionStatusDisplay();
   const StatusIcon = connectionStatus.icon;
 
@@ -743,6 +503,33 @@ export default function DashboardEnhanced() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-nightfall-primary via-nightfall-secondary to-nightfall-primary text-white">
+      {/* Connection Status Banner */}
+      {connectionState !== ConnectionStates.CONNECTED && (
+        <div className={`p-4 text-center ${
+          connectionState === ConnectionStates.ERROR 
+            ? 'bg-red-600/20 border-b border-red-600/30' 
+            : 'bg-yellow-600/20 border-b border-yellow-600/30'
+        }`}>
+          <div className="flex items-center justify-center gap-2">
+            <AlertTriangle className="w-5 h-5" />
+            <span className="font-medium">
+              {connectionState === ConnectionStates.ERROR 
+                ? 'Robot Connection Failed' 
+                : connectionState === ConnectionStates.RECONNECTING
+                ? 'Attempting to reconnect...'
+                : 'Waiting for robot connection'
+              }
+            </span>
+            <span className="text-sm opacity-75">
+              ({reconnectAttemptsRef.current}/4 attempts)
+            </span>
+          </div>
+          <div className="text-sm mt-1 opacity-75">
+            Ensure robot is powered on and WebSocket server is running on {WEBSOCKET_URL}
+          </div>
+        </div>
+      )}
+      
       {/* Settings Panel */}
       <SettingsPanel
         isOpen={showSettings}
@@ -770,8 +557,8 @@ export default function DashboardEnhanced() {
               <Radio className="w-8 h-8 text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-shadow">Project Nightfall — Mission Control</h1>
-              <p className="text-gray-400 text-sm">Enhanced rescue robot control dashboard v2.0</p>
+              <h1 className="text-3xl font-bold text-shadow">Project Nightfall — Manual Control</h1>
+              <p className="text-gray-400 text-sm">Enhanced rescue robot control dashboard v2.1</p>
             </div>
           </div>
 
@@ -781,10 +568,19 @@ export default function DashboardEnhanced() {
               {connectionStatus.text}
             </div>
             
-            <div className="bg-gray-700 px-4 py-2 rounded-lg flex items-center gap-2">
-              <Activity className="w-5 h-5 text-blue-400" />
-              <span className="font-medium">{robotState}</span>
-            </div>
+            <Tooltip content="Manual Reconnect">
+              <button
+                onClick={() => {
+                  reconnectAttemptsRef.current = 0;
+                  setReconnectAttempts(0);
+                  connectWebSocket();
+                }}
+                className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                aria-label="Reconnect"
+              >
+                <Radio className="w-5 h-5" />
+              </button>
+            </Tooltip>
             
             {connectionStats.averageLatency > 0 && (
               <Tooltip content="Average network latency">
@@ -1085,7 +881,7 @@ export default function DashboardEnhanced() {
               <div className="mt-6 pt-4 border-t border-gray-700">
                 <DataExportPanel
                   telemetry={telemetry || {}}
-                  waypoints={waypoints}
+                  waypoints={[]}
                   alerts={alerts}
                   connectionStats={connectionStats}
                 />
@@ -1098,24 +894,8 @@ export default function DashboardEnhanced() {
             <div className="card p-6 card-hover">
               <h2 className="text-xl font-semibold mb-4 flex items-center gap-3">
                 <Zap className="w-6 h-6 text-nightfall-accent" />
-                Control Interface
+                Manual Control
               </h2>
-
-              {/* Mode Toggle */}
-              <div className="mb-6">
-                <Tooltip content={mode === 'autonomous' ? 'Switch to manual control' : 'Switch to autonomous mode'}>
-                  <button 
-                    onClick={toggleMode}
-                    className={`w-full p-4 rounded-lg font-semibold transition-all duration-200 ${
-                      mode === 'autonomous' 
-                        ? 'bg-nightfall-success hover:bg-nightfall-success/90 text-white glow-green' 
-                        : 'bg-gray-700 hover:bg-gray-600 text-white'
-                    }`}
-                  >
-                    {mode === 'autonomous' ? '🤖 Autonomous Mode' : '🎮 Manual Mode'}
-                  </button>
-                </Tooltip>
-              </div>
 
               {/* Movement Controls */}
               <div className="mb-6">
@@ -1124,8 +904,7 @@ export default function DashboardEnhanced() {
                   <div></div>
                   <button 
                     onClick={moveForward}
-                    disabled={mode === 'autonomous'}
-                    className="control-btn-forward disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="control-btn-forward"
                     aria-label="Move forward"
                   >
                     <ArrowUp className="w-6 h-6 mx-auto" />
@@ -1134,8 +913,7 @@ export default function DashboardEnhanced() {
 
                   <button 
                     onClick={turnLeft}
-                    disabled={mode === 'autonomous'}
-                    className="control-btn-left disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="control-btn-left"
                     aria-label="Turn left"
                   >
                     <ArrowLeft className="w-6 h-6 mx-auto" />
@@ -1151,8 +929,7 @@ export default function DashboardEnhanced() {
 
                   <button 
                     onClick={turnRight}
-                    disabled={mode === 'autonomous'}
-                    className="control-btn-right disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="control-btn-right"
                     aria-label="Turn right"
                   >
                     <ArrowRight className="w-6 h-6 mx-auto" />
@@ -1161,8 +938,7 @@ export default function DashboardEnhanced() {
                   <div></div>
                   <button 
                     onClick={moveBackward}
-                    disabled={mode === 'autonomous'}
-                    className="control-btn-back disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="control-btn-back"
                     aria-label="Move backward"
                   >
                     <ArrowDown className="w-6 h-6 mx-auto" />
@@ -1174,8 +950,7 @@ export default function DashboardEnhanced() {
                 <div className="mt-4">
                   <button 
                     onClick={rotateClockwise}
-                    disabled={mode === 'autonomous'}
-                    className="control-btn-rotate w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="control-btn-rotate w-full"
                     aria-label="Rotate clockwise"
                   >
                     <RotateCw className="w-5 h-5 mx-auto mr-2" />
@@ -1260,206 +1035,44 @@ export default function DashboardEnhanced() {
           </div>
         </div>
 
-        {/* Mission Planning Section */}
-        <div className="mt-6 grid grid-cols-1 xl:grid-cols-12 gap-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
-          <div className="xl:col-span-7">
-            <div className="card p-6 card-hover">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold flex items-center gap-3">
-                  <MapPin className="w-6 h-6 text-blue-400" />
-                  Mission Map & Waypoints
-                </h2>
-                <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  isNavigating ? 'bg-nightfall-success text-white animate-pulse-glow' : 'bg-gray-700 text-gray-300'
-                }`}>
-                  {isNavigating ? '🟢 Mission Active' : '⚫ Mission Idle'}
+        {/* Alerts Panel */}
+        <div className="mt-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+          <div className="card p-6 card-hover">
+            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-nightfall-warning" />
+              System Alerts ({alerts.length})
+            </h3>
+            
+            <div className="max-h-48 overflow-y-auto space-y-2">
+              {alerts.length === 0 ? (
+                <div className="text-center text-gray-500 py-4">
+                  <Circle className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <div className="text-sm">No active alerts</div>
                 </div>
-              </div>
-
-              <div className="bg-[#071322] rounded-lg border border-gray-700 overflow-hidden">
-                <canvas 
-                  ref={canvasRef} 
-                  width={800} 
-                  height={360} 
-                  className="w-full cursor-crosshair" 
-                  onClick={handleCanvasClick}
-                />
-              </div>
-
-              <p className="text-sm text-gray-400 mt-3 flex items-center gap-2">
-                <Info className="w-4 h-4" />
-                Click on the map to add waypoints. The robot will navigate them in sequence during autonomous mode.
-              </p>
-
-              {/* Mission Controls */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-                <button 
-                  onClick={startMission}
-                  disabled={waypoints.length === 0 || isNavigating}
-                  className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  <Play className="w-4 h-4" /> Start
-                </button>
-
-                <button 
-                  onClick={pauseMission}
-                  disabled={!isNavigating}
-                  className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  <Pause className="w-4 h-4" /> {isPaused ? 'Resume' : 'Pause'}
-                </button>
-
-                <button 
-                  onClick={stopMission}
-                  disabled={!isNavigating}
-                  className="btn-danger disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  <Target className="w-4 h-4" /> Stop
-                </button>
-
-                <button 
-                  onClick={clearWaypoints}
-                  className="btn-secondary flex items-center justify-center gap-2"
-                >
-                  <Trash2 className="w-4 h-4" /> Clear
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="xl:col-spa card-hovern-5">
-            <div className="card p-6">
-              <h2 className="text-xl font-semibold mb-4 flex items-center gap-3">
-                <Navigation className="w-6 h-6 text-purple-400" />
-                Waypoint Management ({waypoints.length})
-              </h2>
-
-              <div className="max-h-80 overflow-y-auto space-y-2">
-                {waypoints.length === 0 ? (
-                  <div className="text-center text-gray-500 py-8">
-                    <MapPin className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                    <div className="text-lg">No waypoints defined</div>
-                    <div className="text-sm text-gray-400">Click on the mission map to add waypoints</div>
-                  </div>
-                ) : (
-                  waypoints.map((wp, idx) => (
-                    <div 
-                      key={wp.id} 
-                      className={`p-3 rounded-lg border-l-4 transition-all ${
-                        idx < currentWaypoint 
-                          ? 'bg-nightfall-success/20 border-nightfall-success' 
-                          : idx === currentWaypoint 
-                          ? 'bg-nightfall-warning/20 border-nightfall-warning' 
-                          : 'bg-gray-700 border-blue-500'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          {idx < currentWaypoint ? (
-                            <CheckCircle className="w-5 h-5 text-nightfall-success" />
-                          ) : idx === currentWaypoint ? (
-                            <Navigation className="w-5 h-5 text-nightfall-warning animate-pulse" />
-                          ) : (
-                            <Circle className="w-5 h-5 text-blue-400" />
-                          )}
-                          <div>
-                            <div className="font-medium">{wp.name}</div>
-                            <div className="text-xs text-gray-400">
-                              X: {Math.round(wp.x)}, Y: {Math.round(wp.y)}
-                            </div>
-                          </div>
-                        </div>
-                        <button 
-                          onClick={() => removeWaypoint(wp.id)}
-                          disabled={isNavigating}
-                          className="text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed p-1"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Mission Actions */}
-              <div className="mt-6 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <button 
-                    onClick={() => {
-                      // Quick mission patterns
-                      const centerX = 400, centerY = 180, size = 100;
-                      clearWaypoints();
-                      addWaypoint(centerX - size, centerY - size, 'WP1');
-                      addWaypoint(centerX + size, centerY - size, 'WP2');
-                      addWaypoint(centerX + size, centerY + size, 'WP3');
-                      addWaypoint(centerX - size, centerY + size, 'WP4');
-                    }}
-                    className="btn-secondary text-sm"
+              ) : (
+                alerts.map(alert => (
+                  <div 
+                    key={alert.id} 
+                    className={`p-3 rounded-lg text-sm ${
+                      alert.type === 'error' 
+                        ? 'bg-nightfall-error/20 border border-nightfall-error/30 text-nightfall-error' 
+                        : alert.type === 'warning' 
+                        ? 'bg-nightfall-warning/20 border border-nightfall-warning/30 text-nightfall-warning'
+                        : 'bg-nightfall-accent/20 border border-nightfall-accent/30 text-nightfall-accent'
+                    }`}
                   >
-                    Square Pattern
-                  </button>
-                  
-                  <button 
-                    onClick={() => {
-                      // Circular pattern
-                      const centerX = 400, centerY = 180, radius = 120;
-                      clearWaypoints();
-                      for (let i = 0; i < 6; i++) {
-                        const angle = (i / 6) * Math.PI * 2;
-                        addWaypoint(
-                          centerX + Math.cos(angle) * radius,
-                          centerY + Math.sin(angle) * radius,
-                          `WP${i + 1}`
-                        );
-                      }
-                    }}
-                    className="btn-secondary text-sm"
-                  >
-                    Circle Pattern
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Alerts Panel */}
-            <div className="card p-6 mt-6 card-hover">
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-nightfall-warning" />
-                System Alerts ({alerts.length})
-              </h3>
-              
-              <div className="max-h-48 overflow-y-auto space-y-2">
-                {alerts.length === 0 ? (
-                  <div className="text-center text-gray-500 py-4">
-                    <CheckCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    <div className="text-sm">No active alerts</div>
-                  </div>
-                ) : (
-                  alerts.map(alert => (
-                    <div 
-                      key={alert.id} 
-                      className={`p-3 rounded-lg text-sm ${
-                        alert.type === 'error' 
-                          ? 'bg-nightfall-error/20 border border-nightfall-error/30 text-nightfall-error' 
-                          : alert.type === 'warning' 
-                          ? 'bg-nightfall-warning/20 border border-nightfall-warning/30 text-nightfall-warning'
-                          : 'bg-nightfall-accent/20 border border-nightfall-accent/30 text-nightfall-accent'
-                      }`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                        <div className="flex-1">
-                          <div>{alert.message}</div>
-                          <div className="text-xs opacity-75 mt-1">
-                            {alert.timestamp.toLocaleTimeString()}
-                          </div>
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <div>{alert.message}</div>
+                        <div className="text-xs opacity-75 mt-1">
+                          {alert.timestamp.toLocaleTimeString()}
                         </div>
                       </div>
                     </div>
-                  ))
-                )}
-              </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
