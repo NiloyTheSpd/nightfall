@@ -6,6 +6,10 @@
  * @date    December 29, 2025
  *
  * Central configuration file for Phase 2 MVP Hybrid UART + WiFi Architecture
+ *
+ * TRIAL VERSION 1 - MOTOR TESTING FOCUS
+ * This version focuses solely on motor control testing with all non-essential
+ * hardware components disabled for streamlined motor verification.
  */
 
 #ifndef CONFIG_H
@@ -18,6 +22,12 @@
 #define VERSION_MINOR 0
 #define VERSION_PATCH 0
 #define VERSION_STRING "2.0.0"
+
+// ===== TEST VERSION 2 - UNIFIED WIFI NETWORKING =====
+#define TEST_VERSION_2_WIFI_NETWORKING 1
+
+// ===== TRIAL VERSION 1 - MOTOR TESTING =====
+#define TRIAL_VERSION_1_MOTOR_TESTING 1
 
 // ===== HARDWARE CONFIGURATION =====
 #define WHEEL_DIAMETER 85.0 // mm
@@ -57,16 +67,34 @@
 #define CAMERA_QUALITY 10 // JPEG quality (1-63, lower = better)
 
 // ===== WEB DASHBOARD =====
+#ifdef TEST_VERSION_2_WIFI_NETWORKING
 #define WEBSOCKET_PORT 8888
 #define HTTP_PORT 80
 #define MAX_WEBSOCKET_CLIENTS 4
 #define DASHBOARD_UPDATE_INTERVAL 100 // ms
 
+// WiFi Network Configuration
+#define WIFI_SSID "ProjectNightfall"
+#define WIFI_PASSWORD "rescue2025"
+#define REAR_ESP32_IP "192.168.4.1"
+#define FRONT_ESP32_IP "192.168.4.2"
+#define CAMERA_ESP32_IP "192.168.4.3"
+#define WIFI_CHANNEL 1
+#define WIFI_HIDDEN false
+
+// Camera Stream Configuration
+#define CAMERA_STREAM_PORT 81
+#define CAMERA_CAPTURE_PORT 82
+#endif
+
 // ===== MACHINE LEARNING =====
+// DISABLED FOR MOTOR TESTING - Commented out
+/*
 #define ML_CONFIDENCE_THRESHOLD 0.6 // 60%
 #define ML_INFERENCE_INTERVAL 200   // ms
 #define ML_IMAGE_SIZE 96            // pixels
 #define ML_NUM_CLASSES 8
+*/
 
 // ===== POWER MANAGEMENT =====
 #define BATTERY_VOLTAGE_DIVIDER 2.0 // Voltage divider ratio
@@ -75,10 +103,13 @@
 #define SLEEP_INTERVAL 300000  // ms (5 minutes)
 
 // ===== DATA LOGGING =====
+// DISABLED FOR MOTOR TESTING - Commented out
+/*
 #define LOGGING_ENABLED true
 #define TELEMETRY_INTERVAL 500 // ms
 #define SD_CARD_ENABLED true
 #define MAX_LOG_FILE_SIZE 10485760 // 10MB
+*/
 
 // ===== DEBUGGING =====
 #ifdef SERIAL_DEBUG
@@ -101,47 +132,62 @@
 
 // ===== PIN ASSIGNMENTS =====
 
-// REAR MAIN ESP32 (Master Controller)
-// Board: ESP32 DevKit V1 - Master/Brain Controller
-#ifdef REAR_CONTROLLER
-// MQ-2 Gas Sensor - Wiring: VCC->3.3V, GND->GND, A0->GPIO32, D0->GPIO33
-#define PIN_GAS_ANALOG 32  // MQ-2 Gas Sensor Analog Output (A0)
-#define PIN_GAS_DIGITAL 33 // MQ-2 Gas Sensor Digital Output (D0/Buzzer)
+// ESP32 #1 (Front/Master Controller) - GPIO pins for 4-motor system
+#ifdef FRONT_CONTROLLER
+// L298N #1 - Front Main Motors (Motors 1 & 2)
+#define PIN_MOTOR1_PWM 13 // Motor 1 PWM (Front Left)
+#define PIN_MOTOR1_IN1 23 // Motor 1 Forward
+#define PIN_MOTOR1_IN2 22 // Motor 1 Reverse
+#define PIN_MOTOR2_PWM 25 // Motor 2 PWM (Front Right)
+#define PIN_MOTOR2_IN1 26 // Motor 2 Forward
+#define PIN_MOTOR2_IN2 27 // Motor 2 Reverse
 
-// HC-SR04 Ultrasonic Sensor - Wiring: VCC->5V, GND->GND, Trig->GPIO4, Echo->GPIO36 (with voltage divider!)
-#define PIN_US_TRIG 4  // HC-SR04 Trigger Pin (5V output from ESP32)
-#define PIN_US_ECHO 36 // HC-SR04 Echo Pin (5V input - REQUIRES 5V->3.3V voltage divider!)
+// L298N #2 - Auxiliary Motors (Motors 3 & 4)
+#define PIN_MOTOR3_PWM 14 // Motor 3 PWM (Middle Left)
+#define PIN_MOTOR3_IN1 32 // Motor 3 Forward
+#define PIN_MOTOR3_IN2 33 // Motor 3 Reverse
+#define PIN_MOTOR4_PWM 15 // Motor 4 PWM (Middle Right)
+#define PIN_MOTOR4_IN1 19 // Motor 4 Forward
+#define PIN_MOTOR4_IN2 21 // Motor 4 Reverse
 
-// UART Master - Wiring: TX22->RX22(Front), RX21->TX23(Front)
-#define PIN_UART_TX 22 // UART TX to Front ESP32 Slave
-#define PIN_UART_RX 21 // UART RX from Front ESP32 Slave
+#define PIN_US_TRIG 18 // Front Ultrasonic Trigger
+#define PIN_US_ECHO 19 // Front Ultrasonic Echo
 
-// Motors (L298N Driver) - Wiring: 6 motor control pins
-#define PIN_MOTOR_1 13 // Motor 1 Control (L298N IN1/ENA)
-#define PIN_MOTOR_2 14 // Motor 2 Control (L298N IN2/ENB)
-#define PIN_MOTOR_3 18 // Motor 3 Control (L298N IN3)
-#define PIN_MOTOR_4 19 // Motor 4 Control (L298N IN4)
-#define PIN_MOTOR_5 23 // Motor 5 Control (L298N PWM/ENA)
-#define PIN_MOTOR_6 27 // Motor 6 Control (L298N PWM/ENB)
+#define PIN_GAS_ANALOG 4  // MQ-2 Gas Sensor Analog
+#define PIN_GAS_DIGITAL 2 // MQ-2 Gas Sensor Digital
+
+#define PIN_BUZZER 5 // Audio Alert
+
+#define PIN_UART2_TX 16 // UART2 TX to Rear ESP32
+#define PIN_UART2_RX 17 // UART2 RX from Rear ESP32
+#define PIN_UART1_TX 14 // UART1 TX to Camera
+#define PIN_UART1_RX 12 // UART1 RX from Camera
 #endif
 
-// FRONT SLAVE ESP32 (Slave Controller)
-// Board: ESP32 DevKit V1 - Motor Slave Controller
-#ifdef FRONT_CONTROLLER
-// Motors (2x L298N Drivers) - Wiring: 9 motor control pins
-#define PIN_MOTOR_1 13 // Motor 1 Control (L298N #1 IN1/ENA)
-#define PIN_MOTOR_2 14 // Motor 2 Control (L298N #1 IN2/ENB)
-#define PIN_MOTOR_3 18 // Motor 3 Control (L298N #1 IN3)
-#define PIN_MOTOR_4 19 // Motor 4 Control (L298N #1 IN4)
-#define PIN_MOTOR_5 21 // Motor 5 Control (L298N #2 IN1/ENA)
-#define PIN_MOTOR_6 23 // Motor 6 Control (L298N #2 IN2/ENB)
-#define PIN_MOTOR_7 25 // Motor 7 Control (L298N #2 IN3)
-#define PIN_MOTOR_8 26 // Motor 8 Control (L298N #2 IN4)
-#define PIN_MOTOR_9 27 // Motor 9 Control (L298N #2 PWM/ENB)
+// ESP32 #2 (Rear/Slave Controller) - GPIO pins for 2-motor system
+#ifdef REAR_CONTROLLER
+// L298N #3 - Rear Motors (Motors 5 & 6)
+#define PIN_MOTOR5_PWM 26 // Motor 5 PWM (Rear Left)
+#define PIN_MOTOR5_IN1 27 // Motor 5 Forward
+#define PIN_MOTOR5_IN2 25 // Motor 5 Reverse
+#define PIN_MOTOR6_PWM 23 // Motor 6 PWM (Rear Right)
+#define PIN_MOTOR6_IN1 22 // Motor 6 Forward
+#define PIN_MOTOR6_IN2 21 // Motor 6 Reverse
 
-// UART Slave - Wiring: RX22<-TX22(Rear), TX23->RX21(Rear)
-#define PIN_UART_RX 22 // UART RX from Rear ESP32 Master
-#define PIN_UART_TX 23 // UART TX to Rear ESP32 Master
+#define PIN_US_TRIG 32 // Rear Ultrasonic Trigger
+#define PIN_US_ECHO 33 // Rear Ultrasonic Echo
+
+#define PIN_GAS_ANALOG 15 // MQ-2 Gas Sensor Analog
+#define PIN_GAS_DIGITAL 4 // MQ-2 Gas Sensor Digital
+
+#define PIN_BUZZER 5     // Audio Alert
+#define PIN_STATUS_LED 2 // System Status LED
+#define PIN_ERROR_LED 0  // Error/Warning LED
+
+#define PIN_UART2_TX 16 // UART2 TX to Front ESP32
+#define PIN_UART2_RX 17 // UART2 RX from Front ESP32
+#define PIN_UART1_TX 14 // UART1 TX to Camera
+#define PIN_UART1_RX 12 // UART1 RX from Camera
 #endif
 
 // ESP32-CAM (Vision Module)

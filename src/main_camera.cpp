@@ -16,9 +16,9 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WebSockets.h>
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
-#include <ArduinoJson.hpp>
 
 // Define controller type for conditional compilation BEFORE including pins.h
 #define CAMERA_MODULE
@@ -40,7 +40,7 @@ unsigned long lastLEDUpdate = 0;
 bool flashLEDState = false;
 bool statusLEDState = false;
 
-// WiFi configuration (primary: connect to Master AP; fallback: create AP)
+// WiFi configuration for Test Version 2
 const char *ssid = "ProjectNightfall";
 const char *password = "rescue2025";
 const unsigned long wifi_connect_timeout_ms = 10000;
@@ -48,6 +48,10 @@ const unsigned long wifi_connect_timeout_ms = 10000;
 // WebSocket configuration
 const char *websocket_host = "192.168.4.1";
 const uint16_t websocket_port = 8888;
+
+// Camera streaming configuration
+const uint16_t camera_stream_port = 81;
+const uint16_t camera_capture_port = 82;
 
 // Function declarations
 void setup();
@@ -279,7 +283,7 @@ void sendHeartbeat()
     if (webSocketConnected)
     {
         // Create heartbeat JSON
-        StaticJsonDocument<256> heartbeatDoc;
+        JsonDocument heartbeatDoc;
         heartbeatDoc["type"] = "heartbeat";
         heartbeatDoc["source"] = "camera";
         heartbeatDoc["timestamp"] = millis();
@@ -311,7 +315,7 @@ void sendHeartbeat()
 void handleWebSocketEvent(WStype_t type, uint8_t *payload, size_t length)
 {
     String message;
-    DynamicJsonDocument doc(256);
+    JsonDocument doc;
     DeserializationError error;
     String command;
 
@@ -346,7 +350,7 @@ void handleWebSocketEvent(WStype_t type, uint8_t *payload, size_t length)
 
         if (!error)
         {
-            if (doc.containsKey("command"))
+            if (doc["command"].is<String>())
             {
                 command = doc["command"].as<String>();
 

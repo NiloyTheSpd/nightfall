@@ -1,23 +1,26 @@
 /**
- * @file    main_front.cpp
- * @brief   Project Nightfall - Phase 2 MVP FRONT ESP32 (Motor Slave)
+ * @file    main_front_motor_test.cpp
+ * @brief   Project Nightfall - Trial Version 1: MOTOR TESTING FOCUS
  * @author  Project Nightfall Team
- * @version 2.0.0
+ * @version 2.0.0-Trial1
  * @date    December 29, 2025
  *
- * Motor slave controller for the autonomous rescue robot. Handles:
- * - Listens on UART (Serial2) for motor commands {"L": val, "R": val}
- * - Dual motor driver control (4 motors total)
- * - Emergency stop if no UART data received for 1000ms
- * - Non-blocking operation with millis() timers
- * - Robust JSON parsing with ArduinoJson v7
+ * FRONT ESP32 - MOTOR SLAVE CONTROLLER (Motor Testing Version)
+ * This version focuses solely on motor control testing with all non-essential
+ * hardware components disabled for streamlined motor verification.
+ *
+ * TRIAL VERSION 1 - MOTOR TESTING FOCUS:
+ * - Keeps all motor control and UART communication code active
+ * - Comments out sensor initialization and reading
+ * - Comments out WiFi, WebSocket, and networking code
+ * - Comments out safety monitoring, gas sensors, etc.
+ * - Keeps emergency stop functionality
+ * - Maintains motor driver pin configurations
  */
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <WiFi.h>
-#include <WebSockets.h>
-#include <WebSocketsClient.h>
+#include <ArduinoJson.hpp>
 
 // Include our libraries
 #include "config.h"
@@ -29,25 +32,36 @@ unsigned long lastHeartbeat = 0;
 bool emergencyStop = false;
 unsigned long emergencyTimestamp = 0;
 
-// WiFi communication (Test Version 2)
-#ifdef TEST_VERSION_2_WIFI_NETWORKING
-bool wifiConnected = false;
-WebSocketsClient webSocket;
-bool webSocketConnected = false;
-unsigned long lastWiFiHeartbeat = 0;
-const char *rearESP32IP = "192.168.4.1";
-const uint16_t rearWebSocketPort = 8888;
-#endif
-
 // Motor control state
 int leftMotorSpeed = 0;
 int rightMotorSpeed = 0;
 int targetLeftSpeed = 0;
 int targetRightSpeed = 0;
 
-// Motor driver definitions (using preprocessor macros from platformio.ini)
-// Motor driver 1 (Front): MOTOR_LEFT_PWM, MOTOR_LEFT_IN1, MOTOR_LEFT_IN2, MOTOR_RIGHT_PWM, MOTOR_RIGHT_IN1, MOTOR_RIGHT_IN2
-// Motor driver 2 (Front Aux): MOTOR2_LEFT_PWM, MOTOR2_LEFT_IN1, MOTOR2_LEFT_IN2, MOTOR2_RIGHT_PWM, MOTOR2_RIGHT_IN1, MOTOR2_RIGHT_IN2
+// DISABLED FOR MOTOR TESTING - Sensor variables (commented out)
+// float frontDistance = 0.0;
+// float rearDistance = 0.0;
+// int gasLevel = 0;
+
+// DISABLED FOR MOTOR TESTING - WiFi variables (commented out)
+// const char* ssid = "ProjectNightfall";
+// const char* password = "rescue2025";
+
+// Motor driver 1 (Front)
+const int MOTOR1_LEFT_PWM = 13;
+const int MOTOR1_LEFT_IN1 = 23;
+const int MOTOR1_LEFT_IN2 = 22;
+const int MOTOR1_RIGHT_PWM = 25;
+const int MOTOR1_RIGHT_IN1 = 26;
+const int MOTOR1_RIGHT_IN2 = 27;
+
+// Motor driver 2 (Front Aux)
+const int MOTOR2_LEFT_PWM = 14;
+const int MOTOR2_LEFT_IN1 = 32;
+const int MOTOR2_LEFT_IN2 = 33;
+const int MOTOR2_RIGHT_PWM = 15;
+const int MOTOR2_RIGHT_IN1 = 19;
+const int MOTOR2_RIGHT_IN2 = 21;
 
 // Function declarations
 void setup();
@@ -66,14 +80,17 @@ void updateMotorDriver2(int leftSpeed, int rightSpeed);
 void stopAllMotors();
 void testMotorMovement();
 
-#ifdef TEST_VERSION_2_WIFI_NETWORKING
-void initializeWiFi();
-void handleWiFiCommunication();
-void sendWiFiHeartbeat();
-void connectToWiFi();
-void connectToWebSocket();
-void handleWebSocketEvent(WStype_t type, uint8_t *payload, size_t length);
-#endif
+// DISABLED FOR MOTOR TESTING - Sensor functions (commented out)
+// void updateSensors();
+// void checkSafetyConditions();
+
+// DISABLED FOR MOTOR TESTING - WiFi/WebSocket functions (commented out)
+// void setupWiFi();
+// void handleWebSocketEvent();
+// void sendTelemetry();
+
+// DISABLED FOR MOTOR TESTING - Serial command handler (simplified)
+// void handleSerialCommands();
 
 // Setup function
 void setup()
@@ -83,8 +100,9 @@ void setup()
     DEBUG_PRINTLN();
     DEBUG_PRINTLN("╔═══════════════════════════════════════════╗");
     DEBUG_PRINTLN("║     PROJECT NIGHTFALL FRONT ESP32         ║");
+    DEBUG_PRINTLN("║      TRIAL VERSION 1 - MOTOR TESTING      ║");
     DEBUG_PRINTLN("║            Motor Slave Controller         ║");
-    DEBUG_PRINTLN("║              Version 2.0.0                ║");
+    DEBUG_PRINTLN("║              Version 2.0.0-Trial1         ║");
     DEBUG_PRINTLN("╚═══════════════════════════════════════════╝");
     DEBUG_PRINTLN();
 
@@ -92,30 +110,15 @@ void setup()
     initializeHardware();
 
     // Initialize UART communication
-    Serial2.begin(UART_BAUDRATE, SERIAL_8N1, 16, 17); // RX=16, TX=17
-
-#ifdef TEST_VERSION_2_WIFI_NETWORKING
-    // Initialize WiFi for Test Version 2
-    initializeWiFi();
-#endif
+    Serial2.begin(UART_BAUDRATE);
 
     systemReady = true;
     lastUARTUpdate = millis();
     lastHeartbeat = millis();
 
-#ifdef TEST_VERSION_2_WIFI_NETWORKING
-    lastWiFiHeartbeat = millis();
-#endif
-
     DEBUG_PRINTLN();
-    DEBUG_PRINTLN("✅ FRONT ESP32 Motor Slave Ready!");
-#ifdef TEST_VERSION_2_WIFI_NETWORKING
-    DEBUG_PRINTLN("WiFi + UART Hybrid Communication Mode");
-    DEBUG_PRINT("WiFi Host: ");
-    DEBUG_PRINTLN(rearESP32IP);
-#else
-    DEBUG_PRINTLN("UART Communication Mode");
-#endif
+    DEBUG_PRINTLN("✅ FRONT ESP32 Motor Slave Ready (Trial Version 1)!");
+    DEBUG_PRINTLN("🔧 MOTOR TESTING MODE - Non-essential features disabled");
     DEBUG_PRINTLN("Listening for UART commands on Serial2");
     DEBUG_PRINTLN();
 }
@@ -131,24 +134,13 @@ void initializeHardware()
 {
     DEBUG_PRINTLN("Initializing motor control hardware...");
 
-#ifdef TEST_VERSION_2_WIFI_NETWORKING
-    // Test Version 2: Single motor driver configuration
-    // Motor Driver: PWM=13, IN1=23, IN2=22 (Left) | PWM=25, IN1=26, IN2=27 (Right)
-    pinMode(13, OUTPUT); // Left Motor PWM
-    pinMode(23, OUTPUT); // Left Motor IN1
-    pinMode(22, OUTPUT); // Left Motor IN2
-    pinMode(25, OUTPUT); // Right Motor PWM
-    pinMode(26, OUTPUT); // Right Motor IN1
-    pinMode(27, OUTPUT); // Right Motor IN2
-#else
-    // Legacy: Dual motor driver configuration
     // Initialize Motor Driver 1 pins
-    pinMode(MOTOR_LEFT_PWM, OUTPUT);
-    pinMode(MOTOR_LEFT_IN1, OUTPUT);
-    pinMode(MOTOR_LEFT_IN2, OUTPUT);
-    pinMode(MOTOR_RIGHT_PWM, OUTPUT);
-    pinMode(MOTOR_RIGHT_IN1, OUTPUT);
-    pinMode(MOTOR_RIGHT_IN2, OUTPUT);
+    pinMode(MOTOR1_LEFT_PWM, OUTPUT);
+    pinMode(MOTOR1_LEFT_IN1, OUTPUT);
+    pinMode(MOTOR1_LEFT_IN2, OUTPUT);
+    pinMode(MOTOR1_RIGHT_PWM, OUTPUT);
+    pinMode(MOTOR1_RIGHT_IN1, OUTPUT);
+    pinMode(MOTOR1_RIGHT_IN2, OUTPUT);
 
     // Initialize Motor Driver 2 pins
     pinMode(MOTOR2_LEFT_PWM, OUTPUT);
@@ -157,12 +149,33 @@ void initializeHardware()
     pinMode(MOTOR2_RIGHT_PWM, OUTPUT);
     pinMode(MOTOR2_RIGHT_IN1, OUTPUT);
     pinMode(MOTOR2_RIGHT_IN2, OUTPUT);
-#endif
 
     // Stop all motors initially
     stopAllMotors();
 
     DEBUG_PRINTLN("Motor control hardware initialized");
+    DEBUG_PRINTLN("Motor Driver 1: PWM=13, IN1=23, IN2=22 (Left) | PWM=25, IN1=26, IN2=27 (Right)");
+    DEBUG_PRINTLN("Motor Driver 2: PWM=14, IN1=32, IN2=33 (Left) | PWM=15, IN1=19, IN2=21 (Right)");
+
+    // DISABLED FOR MOTOR TESTING - Sensor initialization (commented out)
+    /*
+    DEBUG_PRINTLN("Initializing sensors...");
+    // Initialize sensor pins
+    pinMode(14, OUTPUT); // Front US Trig
+    pinMode(18, INPUT);  // Front US Echo
+    pinMode(19, OUTPUT); // Rear US Trig
+    pinMode(21, INPUT);  // Rear US Echo
+    pinMode(32, INPUT);  // Gas Sensor Analog
+    pinMode(4, OUTPUT);  // Buzzer
+    */
+
+    // DISABLED FOR MOTOR TESTING - WiFi initialization (commented out)
+    /*
+    DEBUG_PRINTLN("Initializing WiFi...");
+    setupWiFi();
+    */
+
+    DEBUG_PRINTLN("Hardware initialization complete (Motor Testing Mode)");
 }
 
 void handleMainLoop()
@@ -178,17 +191,32 @@ void handleMainLoop()
     // Update motor control
     updateMotorControl();
 
-#ifdef TEST_VERSION_2_WIFI_NETWORKING
-    // Handle WiFi communication
-    handleWiFiCommunication();
-#endif
-
     // Send periodic heartbeat
     if (now - lastHeartbeat >= HEARTBEAT_INTERVAL)
     {
         sendHeartbeat();
         lastHeartbeat = now;
     }
+
+    // DISABLED FOR MOTOR TESTING - Sensor updates (commented out)
+    /*
+    // Update sensors every 100ms
+    if (now - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL)
+    {
+        updateSensors();
+        checkSafetyConditions();
+        lastSensorUpdate = now;
+    }
+    */
+
+    // DISABLED FOR MOTOR TESTING - WebSocket handling (commented out)
+    /*
+    // Handle WebSocket
+    webSocketServer.loop();
+    */
+
+    // DISABLED FOR MOTOR TESTING - Serial commands (simplified)
+    // handleSerialCommands();
 }
 
 void listenForUARTCommands()
@@ -214,7 +242,7 @@ void listenForUARTCommands()
 void processMotorCommand(const String &command)
 {
     // Parse JSON command: {"L": val, "R": val}
-    JsonDocument doc;
+    DynamicJsonDocument doc(256);
     DeserializationError error = deserializeJson(doc, command);
 
     if (error)
@@ -224,7 +252,7 @@ void processMotorCommand(const String &command)
     }
 
     // Extract motor speeds
-    if (doc["L"].is<int>() && doc["R"].is<int>())
+    if (doc.containsKey("L") && doc.containsKey("R"))
     {
         targetLeftSpeed = doc["L"];
         targetRightSpeed = doc["R"];
@@ -238,7 +266,7 @@ void processMotorCommand(const String &command)
         DEBUG_PRINT(", Right: ");
         DEBUG_PRINTLN(targetRightSpeed);
     }
-    else if (doc["cmd"].is<String>())
+    else if (doc.containsKey("cmd"))
     {
         String cmd = doc["cmd"];
 
@@ -263,6 +291,29 @@ void processMotorCommand(const String &command)
             DEBUG_PRINTLN("Test motor movement command received");
             testMotorMovement();
         }
+        // DISABLED FOR MOTOR TESTING - Additional commands (commented out)
+        /*
+        else if (cmd == "forward")
+        {
+            targetLeftSpeed = 150;
+            targetRightSpeed = 150;
+        }
+        else if (cmd == "backward")
+        {
+            targetLeftSpeed = -150;
+            targetRightSpeed = -150;
+        }
+        else if (cmd == "left")
+        {
+            targetLeftSpeed = -100;
+            targetRightSpeed = 100;
+        }
+        else if (cmd == "right")
+        {
+            targetLeftSpeed = 100;
+            targetRightSpeed = -100;
+        }
+        */
     }
 }
 
@@ -289,35 +340,34 @@ void updateMotorDriver1(int leftSpeed, int rightSpeed)
     // Motor Driver 1 - Left motor
     if (leftSpeed >= 0)
     {
-        analogWrite(MOTOR_LEFT_PWM, leftSpeed);
-        digitalWrite(MOTOR_LEFT_IN1, HIGH);
-        digitalWrite(MOTOR_LEFT_IN2, LOW);
+        analogWrite(MOTOR1_LEFT_PWM, leftSpeed);
+        digitalWrite(MOTOR1_LEFT_IN1, HIGH);
+        digitalWrite(MOTOR1_LEFT_IN2, LOW);
     }
     else
     {
-        analogWrite(MOTOR_LEFT_PWM, abs(leftSpeed));
-        digitalWrite(MOTOR_LEFT_IN1, LOW);
-        digitalWrite(MOTOR_LEFT_IN2, HIGH);
+        analogWrite(MOTOR1_LEFT_PWM, abs(leftSpeed));
+        digitalWrite(MOTOR1_LEFT_IN1, LOW);
+        digitalWrite(MOTOR1_LEFT_IN2, HIGH);
     }
 
     // Motor Driver 1 - Right motor
     if (rightSpeed >= 0)
     {
-        analogWrite(MOTOR_RIGHT_PWM, rightSpeed);
-        digitalWrite(MOTOR_RIGHT_IN1, HIGH);
-        digitalWrite(MOTOR_RIGHT_IN2, LOW);
+        analogWrite(MOTOR1_RIGHT_PWM, rightSpeed);
+        digitalWrite(MOTOR1_RIGHT_IN1, HIGH);
+        digitalWrite(MOTOR1_RIGHT_IN2, LOW);
     }
     else
     {
-        analogWrite(MOTOR_RIGHT_PWM, abs(rightSpeed));
-        digitalWrite(MOTOR_RIGHT_IN1, LOW);
-        digitalWrite(MOTOR_RIGHT_IN2, HIGH);
+        analogWrite(MOTOR1_RIGHT_PWM, abs(rightSpeed));
+        digitalWrite(MOTOR1_RIGHT_IN1, LOW);
+        digitalWrite(MOTOR1_RIGHT_IN2, HIGH);
     }
 }
 
 void updateMotorDriver2(int leftSpeed, int rightSpeed)
 {
-#ifndef TEST_VERSION_2_WIFI_NETWORKING
     // Motor Driver 2 - Left motor
     if (leftSpeed >= 0)
     {
@@ -345,7 +395,6 @@ void updateMotorDriver2(int leftSpeed, int rightSpeed)
         digitalWrite(MOTOR2_RIGHT_IN1, LOW);
         digitalWrite(MOTOR2_RIGHT_IN2, HIGH);
     }
-#endif
 }
 
 void checkUARTTimeout()
@@ -392,14 +441,13 @@ void resetEmergencyStop()
 void stopAllMotors()
 {
     // Stop Motor Driver 1
-    analogWrite(MOTOR_LEFT_PWM, 0);
-    analogWrite(MOTOR_RIGHT_PWM, 0);
-    digitalWrite(MOTOR_LEFT_IN1, LOW);
-    digitalWrite(MOTOR_LEFT_IN2, LOW);
-    digitalWrite(MOTOR_RIGHT_IN1, LOW);
-    digitalWrite(MOTOR_RIGHT_IN2, LOW);
+    analogWrite(MOTOR1_LEFT_PWM, 0);
+    analogWrite(MOTOR1_RIGHT_PWM, 0);
+    digitalWrite(MOTOR1_LEFT_IN1, LOW);
+    digitalWrite(MOTOR1_LEFT_IN2, LOW);
+    digitalWrite(MOTOR1_RIGHT_IN1, LOW);
+    digitalWrite(MOTOR1_RIGHT_IN2, LOW);
 
-#ifndef TEST_VERSION_2_WIFI_NETWORKING
     // Stop Motor Driver 2
     analogWrite(MOTOR2_LEFT_PWM, 0);
     analogWrite(MOTOR2_RIGHT_PWM, 0);
@@ -407,64 +455,12 @@ void stopAllMotors()
     digitalWrite(MOTOR2_LEFT_IN2, LOW);
     digitalWrite(MOTOR2_RIGHT_IN1, LOW);
     digitalWrite(MOTOR2_RIGHT_IN2, LOW);
-#endif
 }
 
 void sendHeartbeat()
 {
-#ifdef TEST_VERSION_2_WIFI_NETWORKING
-    // Send heartbeat via WiFi WebSocket if connected, otherwise UART
-    if (wifiConnected && webSocketConnected)
-    {
-        JsonDocument heartbeatDoc;
-        heartbeatDoc["type"] = "heartbeat";
-        heartbeatDoc["source"] = "front";
-        heartbeatDoc["timestamp"] = millis();
-        heartbeatDoc["emergency"] = emergencyStop;
-        heartbeatDoc["leftSpeed"] = leftMotorSpeed;
-        heartbeatDoc["rightSpeed"] = rightMotorSpeed;
-        heartbeatDoc["uptime"] = millis();
-        heartbeatDoc["wifi_rssi"] = WiFi.RSSI();
-        heartbeatDoc["wifi_ip"] = WiFi.localIP().toString();
-
-        String heartbeat;
-        serializeJson(heartbeatDoc, heartbeat);
-        webSocket.sendTXT(heartbeat);
-
-        DEBUG_PRINT("WiFi Heartbeat sent - Emergency: ");
-        DEBUG_PRINT(emergencyStop ? "YES" : "NO");
-        DEBUG_PRINT(", Left Speed: ");
-        DEBUG_PRINT(leftMotorSpeed);
-        DEBUG_PRINT(", Right Speed: ");
-        DEBUG_PRINTLN(rightMotorSpeed);
-    }
-    else
-    {
-        // Fallback to UART
-        JsonDocument heartbeatDoc;
-        heartbeatDoc["type"] = "heartbeat";
-        heartbeatDoc["source"] = "front";
-        heartbeatDoc["timestamp"] = millis();
-        heartbeatDoc["emergency"] = emergencyStop;
-        heartbeatDoc["leftSpeed"] = leftMotorSpeed;
-        heartbeatDoc["rightSpeed"] = rightMotorSpeed;
-        heartbeatDoc["uptime"] = millis();
-
-        String heartbeat;
-        serializeJson(heartbeatDoc, heartbeat);
-        Serial2.print(heartbeat);
-        Serial2.print("\n");
-
-        DEBUG_PRINT("UART Heartbeat sent - Emergency: ");
-        DEBUG_PRINT(emergencyStop ? "YES" : "NO");
-        DEBUG_PRINT(", Left Speed: ");
-        DEBUG_PRINT(leftMotorSpeed);
-        DEBUG_PRINT(", Right Speed: ");
-        DEBUG_PRINTLN(rightMotorSpeed);
-    }
-#else
-    // Legacy UART-only heartbeat
-    JsonDocument heartbeatDoc;
+    // Send status back to Back ESP32 via Serial2
+    StaticJsonDocument<256> heartbeatDoc;
     heartbeatDoc["type"] = "heartbeat";
     heartbeatDoc["source"] = "front";
     heartbeatDoc["timestamp"] = millis();
@@ -472,6 +468,7 @@ void sendHeartbeat()
     heartbeatDoc["leftSpeed"] = leftMotorSpeed;
     heartbeatDoc["rightSpeed"] = rightMotorSpeed;
     heartbeatDoc["uptime"] = millis();
+    heartbeatDoc["trial_version"] = "motor_testing_v1";
 
     String heartbeat;
     serializeJson(heartbeatDoc, heartbeat);
@@ -484,7 +481,6 @@ void sendHeartbeat()
     DEBUG_PRINT(leftMotorSpeed);
     DEBUG_PRINT(", Right Speed: ");
     DEBUG_PRINTLN(rightMotorSpeed);
-#endif
 }
 
 void testMotorMovement()
@@ -513,7 +509,87 @@ void testMotorMovement()
     DEBUG_PRINTLN("Motor test complete");
 }
 
-// Serial command handler for debugging
+// DISABLED FOR MOTOR TESTING - Simplified sensor functions (commented out)
+/*
+void updateSensors()
+{
+    // Update Front Ultrasonic Sensor
+    digitalWrite(14, LOW);
+    delayMicroseconds(2);
+    digitalWrite(14, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(14, LOW);
+
+    long duration = pulseIn(18, HIGH, 30000); // 30ms timeout
+    if (duration > 0)
+    {
+        frontDistance = duration * 0.034 / 2;
+        if (frontDistance > 400)
+            frontDistance = 400; // Max range
+    }
+
+    // Update Rear Ultrasonic Sensor
+    digitalWrite(19, LOW);
+    delayMicroseconds(2);
+    digitalWrite(19, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(19, LOW);
+
+    duration = pulseIn(21, HIGH, 30000); // 30ms timeout
+    if (duration > 0)
+    {
+        rearDistance = duration * 0.034 / 2;
+        if (rearDistance > 400)
+            rearDistance = 400; // Max range
+    }
+
+    // Update Gas Sensor
+    gasLevel = analogRead(32);
+}
+
+void checkSafetyConditions()
+{
+    // SAFETY OVERRIDE: If (FrontDistance < 20cm) OR (Gas > 400), MUST override commands
+    if (!emergencyStop && (frontDistance < EMERGENCY_STOP_DISTANCE || gasLevel > GAS_THRESHOLD_ANALOG))
+    {
+        String reason = "";
+        if (frontDistance < EMERGENCY_STOP_DISTANCE)
+        {
+            reason = "Obstacle detected: " + String(frontDistance, 1) + "cm";
+        }
+        if (gasLevel > GAS_THRESHOLD_ANALOG)
+        {
+            if (reason.length() > 0)
+                reason += " & ";
+            reason += "Gas level critical: " + String(gasLevel);
+        }
+
+        handleEmergencyStop();
+    }
+}
+*/
+
+// DISABLED FOR MOTOR TESTING - WiFi setup (commented out)
+/*
+void setupWiFi()
+{
+    DEBUG_PRINTLN("Setting up WiFi Access Point...");
+
+    // Create WiFi access point
+    WiFi.softAP(ssid, password);
+    IPAddress IP = WiFi.softAPIP();
+
+    DEBUG_PRINT("Access Point IP: ");
+    DEBUG_PRINTLN(IP);
+    DEBUG_PRINT("SSID: ");
+    DEBUG_PRINTLN(ssid);
+    DEBUG_PRINT("Password: ");
+    DEBUG_PRINTLN(password);
+}
+*/
+
+// DISABLED FOR MOTOR TESTING - Serial command handler (simplified for testing)
+/*
 void handleSerialCommands()
 {
     if (Serial.available())
@@ -523,7 +599,7 @@ void handleSerialCommands()
 
         if (command == "status")
         {
-            Serial.println("=== FRONT ESP32 STATUS ===");
+            Serial.println("=== FRONT ESP32 STATUS (TRIAL VERSION 1) ===");
             Serial.print("Uptime: ");
             Serial.print(millis() / 1000);
             Serial.println(" seconds");
@@ -540,7 +616,8 @@ void handleSerialCommands()
             Serial.print("Last UART Update: ");
             Serial.print((millis() - lastUARTUpdate));
             Serial.println(" ms ago");
-            Serial.println("========================");
+            Serial.println("Mode: MOTOR TESTING");
+            Serial.println("===========================================");
         }
         else if (command == "emergency")
         {
@@ -568,7 +645,7 @@ void handleSerialCommands()
         }
         else if (command == "help")
         {
-            Serial.println("Available commands:");
+            Serial.println("Available commands (Motor Testing Mode):");
             Serial.println("  status  - Show system status");
             Serial.println("  emergency - Emergency stop");
             Serial.println("  reset - Reset emergency stop");
@@ -579,151 +656,4 @@ void handleSerialCommands()
         }
     }
 }
-
-#ifdef TEST_VERSION_2_WIFI_NETWORKING
-void initializeWiFi()
-{
-    DEBUG_PRINTLN("Initializing WiFi client for Test Version 2...");
-
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-    DEBUG_PRINT("Connecting to WiFi");
-
-    unsigned long startTime = millis();
-    while (WiFi.status() != WL_CONNECTED && (millis() - startTime < 10000))
-    {
-        delay(500);
-        DEBUG_PRINT(".");
-    }
-
-    if (WiFi.status() == WL_CONNECTED)
-    {
-        wifiConnected = true;
-        IPAddress IP = WiFi.localIP();
-
-        DEBUG_PRINTLN();
-        DEBUG_PRINTLN("WiFi connected successfully!");
-        DEBUG_PRINT("IP Address: ");
-        DEBUG_PRINTLN(IP);
-        DEBUG_PRINT("RSSI: ");
-        DEBUG_PRINT(WiFi.RSSI());
-        DEBUG_PRINTLN(" dBm");
-
-        // Connect to WebSocket
-        connectToWebSocket();
-    }
-    else
-    {
-        wifiConnected = false;
-        DEBUG_PRINTLN();
-        DEBUG_PRINTLN("WiFi connection failed! Using UART fallback.");
-    }
-}
-
-void connectToWebSocket()
-{
-    if (wifiConnected)
-    {
-        DEBUG_PRINTLN("Connecting to WebSocket...");
-        webSocket.begin(rearESP32IP, rearWebSocketPort);
-        webSocket.onEvent(handleWebSocketEvent);
-        webSocket.setReconnectInterval(5000);
-    }
-}
-
-void handleWebSocketEvent(WStype_t type, uint8_t *payload, size_t length)
-{
-    switch (type)
-    {
-    case WStype_DISCONNECTED:
-        DEBUG_PRINTLN("[WSc] Disconnected!");
-        webSocketConnected = false;
-        break;
-    case WStype_CONNECTED:
-        DEBUG_PRINTLN("[WSc] Connected to url: ");
-        DEBUG_PRINTLN((char *)payload);
-        webSocketConnected = true;
-        break;
-    case WStype_TEXT:
-        DEBUG_PRINTLN("[WSc] get text: ");
-        DEBUG_PRINTLN((char *)payload);
-        processMotorCommand(String((char *)payload));
-        break;
-    case WStype_BIN:
-    case WStype_ERROR:
-    case WStype_FRAGMENT_TEXT_START:
-    case WStype_FRAGMENT_BIN_START:
-    case WStype_FRAGMENT:
-    case WStype_FRAGMENT_FIN:
-        break;
-    }
-}
-
-void handleWiFiCommunication()
-{
-    // Handle WebSocket communication
-    if (wifiConnected)
-    {
-        webSocket.loop();
-
-        // Send periodic heartbeat
-        unsigned long now = millis();
-        if (now - lastWiFiHeartbeat >= HEARTBEAT_INTERVAL)
-        {
-            sendWiFiHeartbeat();
-            lastWiFiHeartbeat = now;
-        }
-
-        // Check WiFi connection status
-        if (WiFi.status() != WL_CONNECTED)
-        {
-            wifiConnected = false;
-            webSocketConnected = false;
-            DEBUG_PRINTLN("WiFi disconnected, attempting reconnection...");
-            connectToWiFi();
-        }
-    }
-}
-
-void sendWiFiHeartbeat()
-{
-    if (webSocketConnected)
-    {
-        JsonDocument heartbeatDoc;
-        heartbeatDoc["type"] = "heartbeat";
-        heartbeatDoc["source"] = "front";
-        heartbeatDoc["timestamp"] = millis();
-        heartbeatDoc["emergency"] = emergencyStop;
-        heartbeatDoc["leftSpeed"] = leftMotorSpeed;
-        heartbeatDoc["rightSpeed"] = rightMotorSpeed;
-        heartbeatDoc["uptime"] = millis();
-        heartbeatDoc["wifi_rssi"] = WiFi.RSSI();
-        heartbeatDoc["wifi_ip"] = WiFi.localIP().toString();
-
-        String heartbeat;
-        serializeJson(heartbeatDoc, heartbeat);
-        webSocket.sendTXT(heartbeat);
-
-        DEBUG_PRINT("WiFi Heartbeat sent - RSSI: ");
-        DEBUG_PRINT(WiFi.RSSI());
-        DEBUG_PRINT(" dBm");
-    }
-}
-
-void connectToWiFi()
-{
-    if (WiFi.status() != WL_CONNECTED)
-    {
-        DEBUG_PRINTLN("Attempting WiFi reconnection...");
-        WiFi.reconnect();
-        delay(1000);
-
-        if (WiFi.status() == WL_CONNECTED)
-        {
-            wifiConnected = true;
-            connectToWebSocket();
-        }
-    }
-}
-#endif
+*/

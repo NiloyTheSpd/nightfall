@@ -16,10 +16,12 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WebSockets.h>
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
-#include <ArduinoJson.hpp>
 #include <ESPAsyncWebServer.h>
+#include <FS.h>
+#include <LittleFS.h>
 
 // Include our libraries
 #include "config.h"
@@ -54,9 +56,18 @@ int smokeLevel = 0;
 float batteryVoltage = 14.8;
 unsigned long uptime = 0;
 
+// Device connection tracking
+bool frontESP32Connected = false;
+bool cameraESP32Connected = false;
+unsigned long lastFrontHeartbeat = 0;
+unsigned long lastCameraHeartbeat = 0;
+String currentMovement = "STOPPED";
+
 // WiFi configuration
 const char *ssid = "ProjectNightfall";
 const char *password = "rescue2025";
+const char *frontESP32IP = "192.168.4.2";
+const char *cameraESP32IP = "192.168.4.3";
 
 // Function declarations
 void setup();
@@ -71,6 +82,7 @@ void updateMotorControl();
 void sendTelemetry();
 void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length);
 void processDriveCommand(const JsonDocument &doc);
+void processMotorAPICommand(const String &command);
 void activateEmergencyStop(const String &reason);
 void deactivateEmergencyStop();
 void soundBuzzer(int duration);
@@ -78,6 +90,12 @@ void updateBuzzer();
 void sendStatusToWebSocket();
 String formatTelemetryJSON();
 String formatStatusJSON();
+String formatDeviceStatusJSON();
+void sendMotorCommandViaWiFi(int leftSpeed, int rightSpeed);
+void sendMotorCommandViaUART(int leftSpeed, int rightSpeed);
+bool isWiFiConnected();
+bool isFrontESP32Connected();
+bool isCameraESP32Connected();
 
 // Setup function
 void setup()
@@ -86,8 +104,8 @@ void setup()
     Serial.begin(115200);
     DEBUG_PRINTLN();
     DEBUG_PRINTLN("╔═══════════════════════════════════════════╗");
-    DEBUG_PRINTLN("║     PROJECT NIGHTFALL BACK ESP32          ║");
-    DEBUG_PRINTLN("║           Master/Brain Controller         ║");
+    DEBUG_PRINTLN("║     PROJECT NIGHTFALL REAR ESP32          ║");
+    DEBUG_PRINTLN("║           Master Controller + Motors      ║");
     DEBUG_PRINTLN("║              Version 2.0.0                ║");
     DEBUG_PRINTLN("╚═══════════════════════════════════════════╝");
     DEBUG_PRINTLN();
@@ -101,7 +119,8 @@ void setup()
 
     systemReady = true;
     DEBUG_PRINTLN();
-    DEBUG_PRINTLN("✅ BACK ESP32 Master Controller Ready!");
+    DEBUG_PRINTLN("✅ REAR ESP32 Master Controller Ready!");
+    DEBUG_PRINTLN("🎯 Controlling Motors 5 & 6 (Rear Left & Right)");
     DEBUG_PRINT("WiFi AP: ");
     DEBUG_PRINTLN(ssid);
     DEBUG_PRINT("WebSocket Server: Port 8888");
@@ -121,19 +140,21 @@ void initializeHardware()
 {
     DEBUG_PRINTLN("Initializing hardware...");
 
-    // Initialize motor control pins (L298N driver)
-    pinMode(13, OUTPUT); // Motor PWM 1
-    pinMode(14, OUTPUT); // Motor IN1
-    pinMode(18, OUTPUT); // Motor IN2
-    pinMode(19, OUTPUT); // Motor IN3
-    pinMode(23, OUTPUT); // Motor IN4
-    pinMode(27, OUTPUT); // Motor PWM 2
+    // Initialize motor control pins for rear motors (Motors 5 & 6)
+    pinMode(PIN_MOTOR5_PWM, OUTPUT); // Motor 5 PWM (Rear Left)
+    pinMode(PIN_MOTOR5_IN1, OUTPUT); // Motor 5 Forward
+    pinMode(PIN_MOTOR5_IN2, OUTPUT); // Motor 5 Reverse
+    pinMode(PIN_MOTOR6_PWM, OUTPUT); // Motor 6 PWM (Rear Right)
+    pinMode(PIN_MOTOR6_IN1, OUTPUT); // Motor 6 Forward
+    pinMode(PIN_MOTOR6_IN2, OUTPUT); // Motor 6 Reverse
 
     // Initialize sensor pins
-    pinMode(4, OUTPUT);  // HC-SR04 Trig
-    pinMode(36, INPUT);  // HC-SR04 Echo (with voltage divider!)
-    pinMode(32, INPUT);  // MQ-2 Gas Sensor Analog (A0)
-    pinMode(33, OUTPUT); // Buzzer / MQ-2 Digital (shared)
+    pinMode(PIN_US_TRIG, OUTPUT);    // Ultrasonic Trig
+    pinMode(PIN_US_ECHO, INPUT);     // Ultrasonic Echo
+    pinMode(PIN_GAS_ANALOG, INPUT);  // Gas Sensor Analog
+    pinMode(PIN_BUZZER, OUTPUT);     // Buzzer
+    pinMode(PIN_STATUS_LED, OUTPUT); // Status LED
+    pinMode(PIN_ERROR_LED, OUTPUT);  // Error LED
 
     // Initialize UART pins (Serial2 - hardware fixed GPIO16/17)
     pinMode(17, OUTPUT); // UART TX2
@@ -143,13 +164,12 @@ void initializeHardware()
     Serial2.begin(UART_BAUDRATE, SERIAL_8N1, 16, 17); // RX=16, TX=17
 
     // Stop all motors initially
-    analogWrite(13, 0);
-    analogWrite(27, 0);
-    digitalWrite(14, LOW);
-    digitalWrite(18, LOW);
-    digitalWrite(19, LOW);
-    digitalWrite(23, LOW);
-    digitalWrite(33, LOW); // Buzzer off
+    analogWrite(PIN_MOTOR5_PWM, 0);
+    analogWrite(PIN_MOTOR6_PWM, 0);
+    digitalWrite(PIN_MOTOR5_IN1, LOW);
+    digitalWrite(PIN_MOTOR5_IN2, LOW);
+    digitalWrite(PIN_MOTOR6_IN1, LOW);
+    digitalWrite(PIN_MOTOR6_IN2, LOW);
 
     DEBUG_PRINTLN("Hardware initialized");
 }
@@ -174,69 +194,34 @@ void setupWebServer()
 {
     DEBUG_PRINTLN("Setting up Web Server and WebSocket Server...");
 
-    // Serve main dashboard - using String to avoid async issues
-    String index_html = R"(<!DOCTYPE html>
-<html><head><title>Project Nightfall - Robot Control</title>
-<meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>
-<style>
-body{font-family:Arial;margin:20px;background:#1a1a1a;color:#fff}
-.container{max-width:800px;margin:0 auto}
-.card{background:#2d2d2d;border-radius:10px;padding:20px;margin:10px 0}
-.status{display:inline-block;padding:5px 15px;border-radius:20px;margin:5px}
-.normal{background:#28a745}.warning{background:#ffc107;color:#000}.error{background:#dc3545}
-.button{background:#007bff;color:white;border:none;padding:10px 20px;margin:5px;border-radius:5px;cursor:pointer}
-.button:hover{background:#0056b3}
-.button.emergency{background:#dc3545}
-.button.emergency:hover{background:#c82333}
-.telemetry{font-size:1.2em;margin:10px 0}
-</style></head>
-<body><div class='container'>
-<h1>🤖 Project Nightfall - Rescue Robot Control</h1>
-<div class='card'><h2>System Status</h2>
-<div class='telemetry'>Robot State: <span id='robotState' class='status normal'>READY</span></div>
-<div class='telemetry'>Uptime: <span id='uptime'>0s</span></div>
-<div class='telemetry'>Emergency: <span id='emergency' class='status normal'>NO</span></div></div>
-<div class='card'><h2>Sensor Data</h2>
-<div class='telemetry'>Front Distance: <span id='frontDistance'>0</span> cm</div>
-<div class='telemetry'>Rear Distance: <span id='rearDistance'>0</span> cm</div>
-<div class='telemetry'>Gas Level: <span id='gasLevel'>0</span></div>
-<div class='telemetry'>Smoke Level: <span id='smokeLevel'>0</span></div>
-<div class='telemetry'>Battery: <span id='battery'>14.8</span> V</div></div>
-<div class='card'><h2>Manual Control</h2>
-<button class='button' onclick='sendCommand("forward")'>⬆️ Forward</button>
-<button class='button' onclick='sendCommand("left")'>⬅️ Turn Left</button>
-<button class='button' onclick='sendCommand("right")'>➡️ Turn Right</button>
-<button class='button' onclick='sendCommand("backward")'>⬇️ Backward</button>
-<button class='button' onclick='sendCommand("stop")'>⏹️ Stop</button>
-<button class='button emergency' onclick='sendCommand("emergency")'>🚨 Emergency Stop</button></div>
+    // Initialize LittleFS
+    if (!LittleFS.begin())
+    {
+        DEBUG_PRINTLN("LittleFS Mount Failed");
+        return;
+    }
 
-</div>
-<script>
-var ws = new WebSocket('ws://192.168.4.1:8888');
-ws.onopen = function(){console.log('Connected to robot');};
-ws.onmessage = function(event){
-var data = JSON.parse(event.data);
-if(data.type === 'telemetry'){
-document.getElementById('frontDistance').textContent = data.dist;
-document.getElementById('rearDistance').textContent = data.rearDist;
-document.getElementById('gasLevel').textContent = data.gas;
-document.getElementById('smokeLevel').textContent = data.smoke;
-document.getElementById('battery').textContent = data.battery;
-document.getElementById('uptime').textContent = Math.floor(data.uptime/1000) + 's';
-document.getElementById('emergency').textContent = data.emergency ? 'YES' : 'NO';
-document.getElementById('emergency').className = 'status ' + (data.emergency ? 'error' : 'normal');
-}
-};
-function sendCommand(cmd){ws.send(JSON.stringify({command: cmd}));}
-</script></body></html>)";
+    // Serve main dashboard from LittleFS
+    webServer.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+                 { 
+        if (LittleFS.exists("/index.html")) {
+            request->send(LittleFS, "/index.html", "text/html");
+        } else {
+            request->send(200, "text/html", 
+                "<h1>Project Nightfall Dashboard</h1>"
+                "<p>Dashboard file not found. Please check LittleFS upload.</p>"
+                "<p><a href='/api/status'>System Status</a></p>"
+                "<p><a href='/api/telemetry'>Telemetry Data</a></p>"
+            );
+        } });
 
-    webServer.on("/", HTTP_GET, [&index_html](AsyncWebServerRequest *request)
-                 { request->send(200, "text/html", index_html); });
+    // Serve static files from LittleFS
+    webServer.serveStatic("/", LittleFS, "/");
 
     // API endpoints
     webServer.on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request)
                  {
-        DynamicJsonDocument doc(512);
+        JsonDocument doc;
         doc["status"] = "online";
         doc["version"] = VERSION_STRING;
         doc["uptime"] = millis();
@@ -245,6 +230,9 @@ function sendCommand(cmd){ws.send(JSON.stringify({command: cmd}));}
         doc["rearDistance"] = rearDistance;
         doc["gasLevel"] = gasLevel;
         doc["battery"] = batteryVoltage;
+        doc["leftMotorSpeed"] = leftMotorSpeed;
+        doc["rightMotorSpeed"] = rightMotorSpeed;
+        doc["robotState"] = emergencyStop ? "EMERGENCY" : "READY";
         
         String response;
         serializeJson(doc, response);
@@ -255,6 +243,38 @@ function sendCommand(cmd){ws.send(JSON.stringify({command: cmd}));}
         String telemetry = formatTelemetryJSON();
         request->send(200, "application/json", telemetry); });
 
+    // Motor control API
+    webServer.on("/api/motor", HTTP_POST, [](AsyncWebServerRequest *request)
+                 {
+        if (request->hasParam("command", true)) {
+            String command = request->getParam("command", true)->value();
+            processMotorAPICommand(command);
+            request->send(200, "application/json", "{\"status\":\"ok\"}");
+        } else {
+            request->send(400, "application/json", "{\"error\":\"Missing command parameter\"}");
+        } });
+
+    // Device status API
+    webServer.on("/api/devices", HTTP_GET, [](AsyncWebServerRequest *request)
+                 {
+        String deviceStatus = formatDeviceStatusJSON();
+        request->send(200, "application/json", deviceStatus); });
+
+    // Camera stream endpoint
+    webServer.on("/camera", HTTP_GET, [](AsyncWebServerRequest *request)
+                 {
+        String html = R"(<!DOCTYPE html>
+<html><head><title>ESP-CAM Stream</title>
+<meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<style>body{margin:0;padding:20px;background:#000;color:#fff;font-family:Arial;}
+img{max-width:100%;height:auto;border:2px solid #333;border-radius:10px;}
+</style></head>
+<body><h1>ESP-CAM Live Stream</h1>
+<img src='http://192.168.4.3:81/stream' id='cameraFeed'>
+<script>setInterval(function(){document.getElementById('cameraFeed').src='http://192.168.4.3:81/stream?'+Date.now();},100);</script>
+</body></html>)";
+        request->send(200, "text/html", html); });
+
     // Start web server
     webServer.begin();
 
@@ -264,6 +284,7 @@ function sendCommand(cmd){ws.send(JSON.stringify({command: cmd}));}
 
     DEBUG_PRINTLN("Web server started on port 80");
     DEBUG_PRINTLN("WebSocket server started on port 8888");
+    DEBUG_PRINTLN("LittleFS initialized - serving dashboard from /index.html");
 }
 
 void handleMainLoop()
@@ -298,30 +319,27 @@ void handleMainLoop()
 
 void updateSensors()
 {
-    // Update Front Ultrasonic Sensor (HC-SR04)
-    digitalWrite(4, LOW); // GPIO4 = Trig
+    // Update Front Ultrasonic Sensor
+    digitalWrite(PIN_US_TRIG, LOW);
     delayMicroseconds(2);
-    digitalWrite(4, HIGH);
+    digitalWrite(PIN_US_TRIG, HIGH);
     delayMicroseconds(10);
-    digitalWrite(4, LOW);
+    digitalWrite(PIN_US_TRIG, LOW);
 
-    long duration = pulseIn(36, HIGH, 30000); // GPIO36 = Echo, 30ms timeout
+    long duration = pulseIn(PIN_US_ECHO, HIGH, 30000); // 30ms timeout
     if (duration > 0)
     {
         frontDistance = duration * 0.034 / 2;
         if (frontDistance > 400)
             frontDistance = 400; // Max range
     }
-    else
-    {
-        frontDistance = 400; // No echo = max range
-    }
 
-    // Rear ultrasonic not installed - set to safe default
-    rearDistance = 400;
+    // Update Rear Ultrasonic Sensor (assuming same sensor with dual echo functionality)
+    // In this configuration, front and rear distances are measured by same sensor
+    rearDistance = frontDistance; // Simplified for testing
 
-    // Update Gas Sensor (MQ-2)
-    gasLevel = analogRead(32); // GPIO32 = MQ-2 A0
+    // Update Gas Sensor
+    gasLevel = analogRead(PIN_GAS_ANALOG);
 }
 
 void checkSafetyConditions()
@@ -356,45 +374,45 @@ void checkSafetyConditions()
 
 void updateMotorControl()
 {
-    // Apply target speeds to motors
-    leftMotorSpeed = targetLeftSpeed;
-    rightMotorSpeed = targetRightSpeed;
+    // Apply target speeds to rear motors
+    leftMotorSpeed = targetLeftSpeed;   // Motor 5 (Rear Left)
+    rightMotorSpeed = targetRightSpeed; // Motor 6 (Rear Right)
 
     // Constrain motor speeds
     leftMotorSpeed = constrain(leftMotorSpeed, -255, 255);
     rightMotorSpeed = constrain(rightMotorSpeed, -255, 255);
 
-    // Update motor outputs
+    // Update rear motor outputs (Motors 5 & 6)
     if (leftMotorSpeed >= 0)
     {
-        analogWrite(13, leftMotorSpeed);
-        digitalWrite(23, HIGH);
-        digitalWrite(22, LOW);
+        analogWrite(PIN_MOTOR5_PWM, leftMotorSpeed);
+        digitalWrite(PIN_MOTOR5_IN1, HIGH);
+        digitalWrite(PIN_MOTOR5_IN2, LOW);
     }
     else
     {
-        analogWrite(13, abs(leftMotorSpeed));
-        digitalWrite(23, LOW);
-        digitalWrite(22, HIGH);
+        analogWrite(PIN_MOTOR5_PWM, abs(leftMotorSpeed));
+        digitalWrite(PIN_MOTOR5_IN1, LOW);
+        digitalWrite(PIN_MOTOR5_IN2, HIGH);
     }
 
     if (rightMotorSpeed >= 0)
     {
-        analogWrite(25, rightMotorSpeed);
-        digitalWrite(26, HIGH);
-        digitalWrite(27, LOW);
+        analogWrite(PIN_MOTOR6_PWM, rightMotorSpeed);
+        digitalWrite(PIN_MOTOR6_IN1, HIGH);
+        digitalWrite(PIN_MOTOR6_IN2, LOW);
     }
     else
     {
-        analogWrite(25, abs(rightMotorSpeed));
-        digitalWrite(26, LOW);
-        digitalWrite(27, HIGH);
+        analogWrite(PIN_MOTOR6_PWM, abs(rightMotorSpeed));
+        digitalWrite(PIN_MOTOR6_IN1, LOW);
+        digitalWrite(PIN_MOTOR6_IN2, HIGH);
     }
 
     // Send motor commands to Front ESP32 via UART
-    StaticJsonDocument<256> motorDoc;
-    motorDoc["L"] = leftMotorSpeed;
-    motorDoc["R"] = rightMotorSpeed;
+    JsonDocument motorDoc;
+    motorDoc["L"] = leftMotorSpeed;  // Motor 5 speed
+    motorDoc["R"] = rightMotorSpeed; // Motor 6 speed
 
     String motorCommand;
     serializeJson(motorDoc, motorCommand);
@@ -435,6 +453,7 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t l
         DEBUG_PRINT("WebSocket client ");
         DEBUG_PRINT(num);
         DEBUG_PRINTLN(" disconnected");
+        // Check if it was a known device
         break;
 
     case WStype_TEXT:
@@ -445,7 +464,7 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t l
         DEBUG_PRINTLN(message);
 
         // Parse JSON command
-        DynamicJsonDocument doc(512);
+        JsonDocument doc;
         DeserializationError error = deserializeJson(doc, message);
 
         if (error)
@@ -454,9 +473,51 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t l
             return;
         }
 
-        if (doc.containsKey("command"))
+        if (doc["command"].is<String>())
         {
             processDriveCommand(doc);
+        }
+
+        // Handle heartbeat messages from devices
+        if (doc["type"].is<String>() && doc["type"] == "heartbeat")
+        {
+            String source = "unknown";
+            if (doc["source"].is<String>())
+            {
+                source = doc["source"].as<String>();
+
+                if (source == "front")
+                {
+                    frontESP32Connected = true;
+                    lastFrontHeartbeat = millis();
+
+                    // Update motor speeds from front ESP32
+                    if (doc["leftSpeed"].is<int>())
+                    {
+                        leftMotorSpeed = doc["leftSpeed"];
+                    }
+                    if (doc["rightSpeed"].is<int>())
+                    {
+                        rightMotorSpeed = doc["rightSpeed"];
+                    }
+                    if (doc["emergency"].is<bool>())
+                    {
+                        bool frontEmergency = doc["emergency"];
+                        if (frontEmergency && !emergencyStop)
+                        {
+                            activateEmergencyStop("Front ESP32 emergency");
+                        }
+                    }
+
+                    DEBUG_PRINTLN("Front ESP32 heartbeat received");
+                }
+                else if (source == "camera")
+                {
+                    cameraESP32Connected = true;
+                    lastCameraHeartbeat = millis();
+                    DEBUG_PRINTLN("Camera ESP32 heartbeat received");
+                }
+            }
         }
         break;
     }
@@ -521,7 +582,9 @@ void activateEmergencyStop(const String &reason)
         targetLeftSpeed = 0;
         targetRightSpeed = 0;
 
-        // Sound buzzer
+        // Set error LED and buzzer
+        digitalWrite(PIN_STATUS_LED, LOW);
+        digitalWrite(PIN_ERROR_LED, HIGH);
         soundBuzzer(500);
 
         DEBUG_PRINTLN("🚨 EMERGENCY STOP ACTIVATED!");
@@ -537,6 +600,11 @@ void deactivateEmergencyStop()
         emergencyStop = false;
         emergencyTimestamp = 0;
         buzzerActive = false;
+
+        // Restore LED states
+        digitalWrite(PIN_STATUS_LED, HIGH);
+        digitalWrite(PIN_ERROR_LED, LOW);
+        digitalWrite(PIN_BUZZER, LOW);
 
         DEBUG_PRINTLN("Emergency stop reset - system resumed");
     }
@@ -561,7 +629,7 @@ void updateBuzzer()
         {
             static bool buzzerState = false;
             buzzerState = !buzzerState;
-            digitalWrite(4, buzzerState);
+            digitalWrite(PIN_BUZZER, buzzerState);
             lastBuzzerUpdate = now;
         }
 
@@ -569,7 +637,7 @@ void updateBuzzer()
         if (now - emergencyTimestamp >= 5000)
         {
             buzzerActive = false;
-            digitalWrite(4, LOW);
+            digitalWrite(PIN_BUZZER, LOW);
         }
     }
 }
@@ -583,7 +651,7 @@ void sendStatusToWebSocket()
 
 String formatTelemetryJSON()
 {
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     doc["type"] = "telemetry";
     doc["timestamp"] = millis();
     doc["dist"] = frontDistance;
@@ -593,6 +661,22 @@ String formatTelemetryJSON()
     doc["battery"] = batteryVoltage;
     doc["uptime"] = uptime;
     doc["emergency"] = emergencyStop;
+    doc["leftSpeed"] = leftMotorSpeed;
+    doc["rightSpeed"] = rightMotorSpeed;
+    doc["targetLeft"] = targetLeftSpeed;
+    doc["targetRight"] = targetRightSpeed;
+    doc["movement"] = currentMovement;
+    doc["robotState"] = emergencyStop ? "EMERGENCY" : "READY";
+
+    // Device connection status
+    doc["devices"]["front"] = isFrontESP32Connected();
+    doc["devices"]["camera"] = isCameraESP32Connected();
+    doc["devices"]["wifi"] = isWiFiConnected();
+    doc["devices"]["rear"] = true; // This is the rear ESP32
+
+    // Last heartbeats
+    doc["heartbeats"]["front"] = millis() - lastFrontHeartbeat;
+    doc["heartbeats"]["camera"] = millis() - lastCameraHeartbeat;
 
     String json;
     serializeJson(doc, json);
@@ -601,12 +685,126 @@ String formatTelemetryJSON()
 
 String formatStatusJSON()
 {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "status";
     doc["status"] = emergencyStop ? "emergency" : "normal";
     doc["ready"] = systemReady;
+    doc["robotState"] = emergencyStop ? "EMERGENCY" : "READY";
 
     String json;
     serializeJson(doc, json);
     return json;
+}
+
+String formatDeviceStatusJSON()
+{
+    JsonDocument doc;
+    doc["type"] = "device_status";
+    doc["rear"] = true; // This is the rear ESP32
+    doc["front"] = frontESP32Connected;
+    doc["camera"] = cameraESP32Connected;
+    doc["lastFrontHeartbeat"] = millis() - lastFrontHeartbeat;
+    doc["lastCameraHeartbeat"] = millis() - lastCameraHeartbeat;
+
+    String json;
+    serializeJson(doc, json);
+    return json;
+}
+
+void processMotorAPICommand(const String &command)
+{
+    if (command == "forward")
+    {
+        targetLeftSpeed = 150;
+        targetRightSpeed = 150;
+        currentMovement = "FORWARD";
+    }
+    else if (command == "backward")
+    {
+        targetLeftSpeed = -150;
+        targetRightSpeed = -150;
+        currentMovement = "BACKWARD";
+    }
+    else if (command == "left")
+    {
+        targetLeftSpeed = -100;
+        targetRightSpeed = 100;
+        currentMovement = "TURN_LEFT";
+    }
+    else if (command == "right")
+    {
+        targetLeftSpeed = 100;
+        targetRightSpeed = -100;
+        currentMovement = "TURN_RIGHT";
+    }
+    else if (command == "stop")
+    {
+        targetLeftSpeed = 0;
+        targetRightSpeed = 0;
+        currentMovement = "STOPPED";
+    }
+    else if (command == "emergency")
+    {
+        activateEmergencyStop("API emergency stop");
+    }
+    else if (command == "emergency_reset")
+    {
+        deactivateEmergencyStop();
+    }
+    else if (command == "climb")
+    {
+        targetLeftSpeed = 200;
+        targetRightSpeed = 200;
+        currentMovement = "CLIMBING";
+    }
+
+    // Send command to front ESP32 via WiFi primary, UART backup
+    if (isWiFiConnected() && isFrontESP32Connected())
+    {
+        sendMotorCommandViaWiFi(targetLeftSpeed, targetRightSpeed);
+    }
+    else
+    {
+        sendMotorCommandViaUART(targetLeftSpeed, targetRightSpeed);
+    }
+}
+
+void sendMotorCommandViaWiFi(int leftSpeed, int rightSpeed)
+{
+    // TODO: Implement HTTP client to send motor commands to front ESP32
+    // For now, we'll rely on UART
+    DEBUG_PRINTLN("WiFi motor command ready (UART fallback)");
+}
+
+void sendMotorCommandViaUART(int leftSpeed, int rightSpeed)
+{
+    JsonDocument motorDoc;
+    motorDoc["L"] = leftSpeed;
+    motorDoc["R"] = rightSpeed;
+
+    String motorCommand;
+    serializeJson(motorDoc, motorCommand);
+
+    // Send via Serial (for debugging) and UART (to Front ESP32)
+    Serial2.print(motorCommand);
+    Serial2.print("\n");
+
+    DEBUG_PRINT("UART Motor Command: ");
+    DEBUG_PRINTLN(motorCommand);
+}
+
+bool isWiFiConnected()
+{
+    // For AP mode, this always returns true if AP is started
+    return true;
+}
+
+bool isFrontESP32Connected()
+{
+    return frontESP32Connected && (millis() - lastFrontHeartbeat < 5000);
+}
+
+bool isCameraESP32Connected()
+{
+    return cameraESP32Connected && (millis() - lastCameraHeartbeat < 5000);
 }
