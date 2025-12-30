@@ -101,63 +101,57 @@
 
 // ===== PIN ASSIGNMENTS =====
 
-// ESP32 #1 (Front/Master Controller) - GPIO pins
-#ifdef FRONT_CONTROLLER
-#define PIN_MOTOR_ENA 18 // Front Left Motor PWM
-#define PIN_MOTOR_IN1 19 // Front Left Motor Forward
-#define PIN_MOTOR_IN2 21 // Front Left Motor Reverse
-#define PIN_MOTOR_ENB 22 // Front Right Motor PWM
-#define PIN_MOTOR_IN3 23 // Front Right Motor Forward
-#define PIN_MOTOR_IN4 25 // Front Right Motor Reverse
-
-#define PIN_US_TRIG 26 // Front Ultrasonic Trigger
-#define PIN_US_ECHO 27 // Front Ultrasonic Echo
-
-#define PIN_GAS_ANALOG 32    // MQ-2 Gas Sensor Analog
-#define PIN_GAS_DIGITAL 33   // MQ-2 Gas Sensor Digital
-#define PIN_SMOKE_ANALOG 12  // Smoke Sensor Analog
-#define PIN_SMOKE_DIGITAL 13 // Smoke Sensor Digital
-
-#define PIN_BUZZER 13 // Audio Alert
-
-#define PIN_UART2_TX 16 // UART2 TX to Rear ESP32
-#define PIN_UART2_RX 17 // UART2 RX from Rear ESP32
-#define PIN_UART1_TX 14 // UART1 TX to Camera
-#define PIN_UART1_RX 12 // UART1 RX from Camera
-#endif
-
-// ESP32 #2 (Rear/Slave Controller) - GPIO pins
+// REAR MAIN ESP32 (Master Controller)
+// Board: ESP32 DevKit V1 - Master/Brain Controller
 #ifdef REAR_CONTROLLER
-#define MOTOR3_ENA 18 // Rear Left Motor PWM (Motor 3)
-#define MOTOR3_IN1 19 // Rear Left Motor Forward
-#define MOTOR3_IN2 21 // Rear Left Motor Reverse
-#define MOTOR4_ENA 32 // Rear Left Motor PWM (Motor 4)
-#define MOTOR4_IN1 33 // Rear Left Motor Forward
-#define MOTOR4_IN2 35 // Rear Left Motor Reverse
+// MQ-2 Gas Sensor - Wiring: VCC->3.3V, GND->GND, A0->GPIO32, D0->GPIO33
+#define PIN_GAS_ANALOG 32  // MQ-2 Gas Sensor Analog Output (A0)
+#define PIN_GAS_DIGITAL 33 // MQ-2 Gas Sensor Digital Output (D0/Buzzer)
 
-#define FRONT_ULTRASONIC_TRIG 14 // Front US Trig
-#define FRONT_ULTRASONIC_ECHO 18 // Front US Echo
-#define REAR_ULTRASONIC_TRIG 19  // Rear US Trig
-#define REAR_ULTRASONIC_ECHO 21  // Rear US Echo
+// HC-SR04 Ultrasonic Sensor - Wiring: VCC->5V, GND->GND, Trig->GPIO4, Echo->GPIO36 (with voltage divider!)
+#define PIN_US_TRIG 4  // HC-SR04 Trigger Pin (5V output from ESP32)
+#define PIN_US_ECHO 36 // HC-SR04 Echo Pin (5V input - REQUIRES 5V->3.3V voltage divider!)
 
-#define GAS_SENSOR_ANALOG 32    // Gas Sensor Analog
-#define GAS_SENSOR_DIGITAL 33   // Gas Sensor Digital
-#define SMOKE_SENSOR_ANALOG 12  // Smoke Sensor Analog
-#define SMOKE_SENSOR_DIGITAL 13 // Smoke Sensor Digital
-#define BUZZER_PIN 4            // Buzzer
+// UART Master - Wiring: TX22->RX22(Front), RX21->TX23(Front)
+#define PIN_UART_TX 22 // UART TX to Front ESP32 Slave
+#define PIN_UART_RX 21 // UART RX from Front ESP32 Slave
 
-#define UART_TX 16 // UART TX to Front ESP32
-#define UART_RX 17 // UART RX from Front ESP32
+// Motors (L298N Driver) - Wiring: 6 motor control pins
+#define PIN_MOTOR_1 13 // Motor 1 Control (L298N IN1/ENA)
+#define PIN_MOTOR_2 14 // Motor 2 Control (L298N IN2/ENB)
+#define PIN_MOTOR_3 18 // Motor 3 Control (L298N IN3)
+#define PIN_MOTOR_4 19 // Motor 4 Control (L298N IN4)
+#define PIN_MOTOR_5 23 // Motor 5 Control (L298N PWM/ENA)
+#define PIN_MOTOR_6 27 // Motor 6 Control (L298N PWM/ENB)
 #endif
 
-// ESP32-CAM (Vision Module) - GPIO pins
-#ifdef CAMERA_MODULE
-#define PIN_UART1_TX 14 // UART1 TX to Front ESP32
-#define PIN_UART1_RX 15 // UART1 RX from Front ESP32
-#define PIN_FLASH_LED 4 // Flash LED control (optional)
+// FRONT SLAVE ESP32 (Slave Controller)
+// Board: ESP32 DevKit V1 - Motor Slave Controller
+#ifdef FRONT_CONTROLLER
+// Motors (2x L298N Drivers) - Wiring: 9 motor control pins
+#define PIN_MOTOR_1 13 // Motor 1 Control (L298N #1 IN1/ENA)
+#define PIN_MOTOR_2 14 // Motor 2 Control (L298N #1 IN2/ENB)
+#define PIN_MOTOR_3 18 // Motor 3 Control (L298N #1 IN3)
+#define PIN_MOTOR_4 19 // Motor 4 Control (L298N #1 IN4)
+#define PIN_MOTOR_5 21 // Motor 5 Control (L298N #2 IN1/ENA)
+#define PIN_MOTOR_6 23 // Motor 6 Control (L298N #2 IN2/ENB)
+#define PIN_MOTOR_7 25 // Motor 7 Control (L298N #2 IN3)
+#define PIN_MOTOR_8 26 // Motor 8 Control (L298N #2 IN4)
+#define PIN_MOTOR_9 27 // Motor 9 Control (L298N #2 PWM/ENB)
 
-// Camera pins are internal to ESP32-CAM
-// No additional pin definitions needed
+// UART Slave - Wiring: RX22<-TX22(Rear), TX23->RX21(Rear)
+#define PIN_UART_RX 22 // UART RX from Rear ESP32 Master
+#define PIN_UART_TX 23 // UART TX to Rear ESP32 Master
+#endif
+
+// ESP32-CAM (Vision Module)
+// Board: ESP32-CAM AI-Thinker - Camera Module
+#ifdef CAMERA_MODULE
+// Status LED - Wiring: GPIO33->LED (LOW=ON, HIGH=OFF)
+#define PIN_STATUS_LED 33 // Status LED (RED LED - LOW=ON)
+
+// Note: Camera pins are internal to ESP32-CAM module
+// No additional pin definitions needed for camera/SD card
 #endif
 
 // ===== SYSTEM STATES =====

@@ -7,7 +7,8 @@
 class MotorControl
 {
 public:
-    MotorControl();
+    MotorControl(uint8_t enaPin, uint8_t in1Pin, uint8_t in2Pin,
+                 uint8_t enbPin, uint8_t in3Pin, uint8_t in4Pin);
 
     void begin();
     void update();

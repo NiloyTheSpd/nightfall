@@ -108,17 +108,17 @@ void initializeHardware()
 {
     DEBUG_PRINTLN("Initializing hardware...");
 
-    // Initialize LED pins
-    pinMode(4, OUTPUT);  // Flash LED
-    pinMode(33, OUTPUT); // Status LED
+    // Initialize LED pins per pin.md specifications
+    pinMode(4, OUTPUT);              // Flash LED
+    pinMode(PIN_STATUS_LED, OUTPUT); // Status LED (GPIO33 - LOW=ON per pin.md)
 
     // Turn off LEDs initially
     digitalWrite(4, LOW);
-    digitalWrite(33, LOW);
+    digitalWrite(PIN_STATUS_LED, LOW); // LOW=ON for status LED
 
     DEBUG_PRINTLN("Hardware initialized");
     DEBUG_PRINTLN("Flash LED: Pin 4");
-    DEBUG_PRINTLN("Status LED: Pin 33");
+    DEBUG_PRINTLN("Status LED: GPIO33 (LOW=ON)");
 }
 
 void setupWiFi()
@@ -137,12 +137,12 @@ void setupWiFi()
         delay(500);
         DEBUG_PRINT(".");
 
-        // Flash status LED while connecting
+        // Flash status LED while connecting (GPIO33 - LOW=ON)
         static unsigned long lastFlash = 0;
         if (millis() - lastFlash > 200)
         {
             statusLEDState = !statusLEDState;
-            digitalWrite(33, statusLEDState);
+            digitalWrite(PIN_STATUS_LED, statusLEDState ? HIGH : LOW);
             lastFlash = millis();
         }
     }
@@ -160,8 +160,8 @@ void setupWiFi()
         DEBUG_PRINT(WiFi.RSSI());
         DEBUG_PRINTLN(" dBm");
 
-        // Turn on status LED to indicate successful connection
-        digitalWrite(33, HIGH);
+        // Turn on status LED to indicate successful connection (GPIO33 - LOW=ON)
+        digitalWrite(PIN_STATUS_LED, LOW); // LOW turns LED on
     }
     else
     {
@@ -169,12 +169,12 @@ void setupWiFi()
         DEBUG_PRINTLN();
         DEBUG_PRINTLN("WiFi connection failed! (STA only)");
 
-        // Blink status LED to indicate error
+        // Blink status LED to indicate error (GPIO33 - LOW=ON)
         for (int i = 0; i < 6; i++)
         {
-            digitalWrite(33, HIGH);
+            digitalWrite(PIN_STATUS_LED, LOW); // LED on
             delay(100);
-            digitalWrite(33, LOW);
+            digitalWrite(PIN_STATUS_LED, HIGH); // LED off
             delay(100);
         }
     }
@@ -317,8 +317,8 @@ void handleWebSocketEvent(WStype_t type, uint8_t *payload, size_t length)
         webSocketConnected = true;
         DEBUG_PRINTLN("WebSocket connected to master ESP32");
 
-        // Turn on status LED solid to indicate WebSocket connection
-        digitalWrite(33, HIGH);
+        // Turn on status LED solid to indicate WebSocket connection (GPIO33 - LOW=ON)
+        digitalWrite(PIN_STATUS_LED, LOW); // LOW turns LED on
 
         // Send immediate heartbeat upon connection
         sendHeartbeat();
@@ -382,14 +382,14 @@ void updateLEDs()
         digitalWrite(4, LOW);
     }
 
-    // Update Status LED pattern
+    // Update Status LED pattern (GPIO33 - LOW=ON)
     if (!wifiConnected)
     {
         // Blink red if WiFi not connected
         if (now - lastLEDUpdate >= 500)
         {
             statusLEDState = !statusLEDState;
-            digitalWrite(33, statusLEDState);
+            digitalWrite(PIN_STATUS_LED, statusLEDState ? HIGH : LOW);
             lastLEDUpdate = now;
         }
     }
@@ -399,14 +399,14 @@ void updateLEDs()
         if (now - lastLEDUpdate >= 200)
         {
             statusLEDState = !statusLEDState;
-            digitalWrite(33, statusLEDState);
+            digitalWrite(PIN_STATUS_LED, statusLEDState ? HIGH : LOW);
             lastLEDUpdate = now;
         }
     }
     else if (webSocketConnected)
     {
-        // Solid green if fully connected
-        digitalWrite(33, HIGH);
+        // Solid green if fully connected (LOW=ON)
+        digitalWrite(PIN_STATUS_LED, LOW);
     }
 }
 
@@ -439,7 +439,7 @@ void handleSerialCommands()
             Serial.print("Flash LED: ");
             Serial.println(digitalRead(4) ? "ON" : "OFF");
             Serial.print("Status LED: ");
-            Serial.println(digitalRead(33) ? "ON" : "OFF");
+            Serial.println(digitalRead(PIN_STATUS_LED) ? "OFF" : "ON"); // GPIO33 is LOW=ON
             Serial.print("Last Heartbeat: ");
             Serial.print((millis() - lastHeartbeat) / 1000);
             Serial.println(" seconds ago");

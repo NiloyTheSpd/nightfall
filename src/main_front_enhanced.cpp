@@ -21,6 +21,10 @@
 
 // Include our libraries
 #include "config.h"
+#include "pins.h"
+
+// Define controller type for conditional compilation
+#define FRONT_CONTROLLER
 
 // System state
 bool systemReady = false;
@@ -41,22 +45,22 @@ int targetFrontRightSpeed = 0;
 int targetCenterLeftSpeed = 0;
 int targetCenterRightSpeed = 0;
 
-// Motor driver pin assignments
-// Motor Driver 1 (Front Left/Right)
+// Motor driver pin assignments per pin.md
+// Motor Driver 1 (Front Left/Right) - GPIO13,14,18,19
 #define MOTOR1_LEFT_PWM 13
-#define MOTOR1_LEFT_IN1 23
-#define MOTOR1_LEFT_IN2 22
-#define MOTOR1_RIGHT_PWM 25
-#define MOTOR1_RIGHT_IN1 26
-#define MOTOR1_RIGHT_IN2 27
+#define MOTOR1_LEFT_IN1 14
+#define MOTOR1_LEFT_IN2 18
+#define MOTOR1_RIGHT_PWM 19
+#define MOTOR1_RIGHT_IN1 23
+#define MOTOR1_RIGHT_IN2 25
 
-// Motor Driver 2 (Center Left/Right)
-#define MOTOR2_LEFT_PWM 14
-#define MOTOR2_LEFT_IN1 32
-#define MOTOR2_LEFT_IN2 33
-#define MOTOR2_RIGHT_PWM 15
-#define MOTOR2_RIGHT_IN1 19
-#define MOTOR2_RIGHT_IN2 21
+// Motor Driver 2 (Center Left/Right) - GPIO21,23,25,26,27
+#define MOTOR2_LEFT_PWM 21
+#define MOTOR2_LEFT_IN1 23
+#define MOTOR2_LEFT_IN2 25
+#define MOTOR2_RIGHT_PWM 26
+#define MOTOR2_RIGHT_IN1 27
+#define MOTOR2_RIGHT_IN2 13 // Reusing GPIO13 for additional control
 
 // Function declarations
 void setup();
@@ -117,30 +121,35 @@ void loop()
 
 void initializeHardware()
 {
-    DEBUG_PRINTLN("Initializing four-motor control hardware...");
+    DEBUG_PRINTLN("Initializing nine-motor control hardware...");
 
-    // Initialize Motor Driver 1 pins (Front motors)
-    pinMode(MOTOR1_LEFT_PWM, OUTPUT);
-    pinMode(MOTOR1_LEFT_IN1, OUTPUT);
-    pinMode(MOTOR1_LEFT_IN2, OUTPUT);
-    pinMode(MOTOR1_RIGHT_PWM, OUTPUT);
-    pinMode(MOTOR1_RIGHT_IN1, OUTPUT);
-    pinMode(MOTOR1_RIGHT_IN2, OUTPUT);
+    // Initialize Motor Driver 1 pins (Front motors) - GPIO13,14,18,19,23,25
+    pinMode(MOTOR1_LEFT_PWM, OUTPUT);  // GPIO13
+    pinMode(MOTOR1_LEFT_IN1, OUTPUT);  // GPIO14
+    pinMode(MOTOR1_LEFT_IN2, OUTPUT);  // GPIO18
+    pinMode(MOTOR1_RIGHT_PWM, OUTPUT); // GPIO19
+    pinMode(MOTOR1_RIGHT_IN1, OUTPUT); // GPIO23
+    pinMode(MOTOR1_RIGHT_IN2, OUTPUT); // GPIO25
 
-    // Initialize Motor Driver 2 pins (Center motors)
-    pinMode(MOTOR2_LEFT_PWM, OUTPUT);
-    pinMode(MOTOR2_LEFT_IN1, OUTPUT);
-    pinMode(MOTOR2_LEFT_IN2, OUTPUT);
-    pinMode(MOTOR2_RIGHT_PWM, OUTPUT);
-    pinMode(MOTOR2_RIGHT_IN1, OUTPUT);
-    pinMode(MOTOR2_RIGHT_IN2, OUTPUT);
+    // Initialize Motor Driver 2 pins (Center motors) - GPIO21,23,25,26,27
+    pinMode(MOTOR2_LEFT_PWM, OUTPUT);  // GPIO21
+    pinMode(MOTOR2_LEFT_IN1, OUTPUT);  // GPIO23
+    pinMode(MOTOR2_LEFT_IN2, OUTPUT);  // GPIO25
+    pinMode(MOTOR2_RIGHT_PWM, OUTPUT); // GPIO26
+    pinMode(MOTOR2_RIGHT_IN1, OUTPUT); // GPIO27
+    pinMode(MOTOR2_RIGHT_IN2, OUTPUT); // GPIO13 (reused)
+
+    // Initialize UART Slave pins - Wiring: RX22<-TX22(Rear), TX23->RX21(Rear)
+    pinMode(PIN_UART_RX, INPUT);  // GPIO22 - UART RX from Rear ESP32 Master
+    pinMode(PIN_UART_TX, OUTPUT); // GPIO23 - UART TX to Rear ESP32 Master
 
     // Stop all motors initially
     stopAllMotors();
 
-    DEBUG_PRINTLN("Four-motor control hardware initialized");
-    DEBUG_PRINTLN("Motor Driver 1: PWM=13, IN1=23, IN2=22 (Front Left) | PWM=25, IN1=26, IN2=27 (Front Right)");
-    DEBUG_PRINTLN("Motor Driver 2: PWM=14, IN1=32, IN2=33 (Center Left) | PWM=15, IN1=19, IN2=21 (Center Right)");
+    DEBUG_PRINTLN("Nine-motor control hardware initialized");
+    DEBUG_PRINTLN("Motor Driver 1: GPIO13,14,18,19,23,25 (Front Motors)");
+    DEBUG_PRINTLN("Motor Driver 2: GPIO21,23,25,26,27 (Center Motors)");
+    DEBUG_PRINTLN("UART: GPIO22 (RX), GPIO23 (TX) to Rear ESP32");
 }
 
 void handleMainLoop()
@@ -414,7 +423,7 @@ void resetEmergencyStop()
 
 void stopAllMotors()
 {
-    // Stop Motor Driver 1
+    // Stop Motor Driver 1 (Front motors)
     analogWrite(MOTOR1_LEFT_PWM, 0);
     analogWrite(MOTOR1_RIGHT_PWM, 0);
     digitalWrite(MOTOR1_LEFT_IN1, LOW);
@@ -422,7 +431,7 @@ void stopAllMotors()
     digitalWrite(MOTOR1_RIGHT_IN1, LOW);
     digitalWrite(MOTOR1_RIGHT_IN2, LOW);
 
-    // Stop Motor Driver 2
+    // Stop Motor Driver 2 (Center motors)
     analogWrite(MOTOR2_LEFT_PWM, 0);
     analogWrite(MOTOR2_RIGHT_PWM, 0);
     digitalWrite(MOTOR2_LEFT_IN1, LOW);

@@ -1,12 +1,13 @@
 #include "MotorControl.h"
 
-MotorControl::MotorControl()
-    : _enaPin(PIN_MOTOR_ENA),
-      _in1Pin(PIN_MOTOR_IN1),
-      _in2Pin(PIN_MOTOR_IN2),
-      _enbPin(PIN_MOTOR_ENB),
-      _in3Pin(PIN_MOTOR_IN3),
-      _in4Pin(PIN_MOTOR_IN4),
+MotorControl::MotorControl(uint8_t enaPin, uint8_t in1Pin, uint8_t in2Pin,
+                           uint8_t enbPin, uint8_t in3Pin, uint8_t in4Pin)
+    : _enaPin(enaPin), // Motor PWM pin
+      _in1Pin(in1Pin), // Motor direction pin 1
+      _in2Pin(in2Pin), // Motor direction pin 2
+      _enbPin(enbPin), // Motor PWM pin
+      _in3Pin(in3Pin), // Motor direction pin 1
+      _in4Pin(in4Pin), // Motor direction pin 2
       _currentLeftSpeed(0),
       _currentRightSpeed(0),
       _targetLeftSpeed(0),
@@ -40,7 +41,17 @@ void MotorControl::begin()
     // Stop all motors
     stop();
 
-    DEBUG_PRINTLN("Motor Control initialized");
+    DEBUG_PRINTLN("Motor Control initialized per pin.md");
+    DEBUG_PRINT("PWM Pin: ");
+    DEBUG_PRINTLN(_enaPin);
+    DEBUG_PRINT("Motor Control Pins: ");
+    DEBUG_PRINT(_in1Pin);
+    DEBUG_PRINT(", ");
+    DEBUG_PRINT(_in2Pin);
+    DEBUG_PRINT(", ");
+    DEBUG_PRINT(_in3Pin);
+    DEBUG_PRINT(", ");
+    DEBUG_PRINTLN(_in4Pin);
     DEBUG_PRINT("Max speed: ");
     DEBUG_PRINTLN(_maxSpeed);
     DEBUG_PRINT("Climb speed: ");

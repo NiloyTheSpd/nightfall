@@ -24,6 +24,10 @@
 
 // Include our libraries
 #include "config.h"
+#include "pins.h"
+
+// Define controller type for conditional compilation
+#define REAR_CONTROLLER
 
 // Global objects
 AsyncWebServer webServer(80);
@@ -150,50 +154,45 @@ void initializeHardware()
 {
     DEBUG_PRINTLN("Initializing six-motor control hardware...");
 
-    // Initialize Rear Motor Driver 3 (Rear Left)
-    pinMode(MOTOR3_ENA, OUTPUT); // PWM
-    pinMode(MOTOR3_IN1, OUTPUT); // Forward
-    pinMode(MOTOR3_IN2, OUTPUT); // Reverse
+    // Initialize Rear Motors (L298N Driver) - Wiring: VCC->14.8V, GND->GND, IN1-4->GPIO13,14,18,19,23,27
+    pinMode(PIN_MOTOR_1, OUTPUT); // Motor 1 Control
+    pinMode(PIN_MOTOR_2, OUTPUT); // Motor 2 Control
+    pinMode(PIN_MOTOR_3, OUTPUT); // Motor 3 Control
+    pinMode(PIN_MOTOR_4, OUTPUT); // Motor 4 Control
+    pinMode(PIN_MOTOR_5, OUTPUT); // Motor 5 Control
+    pinMode(PIN_MOTOR_6, OUTPUT); // Motor 6 Control
 
-    // Initialize Rear Motor Driver 4 (Rear Right)
-    pinMode(MOTOR4_ENA, OUTPUT); // PWM
-    pinMode(MOTOR4_IN1, OUTPUT); // Forward
-    pinMode(MOTOR4_IN2, OUTPUT); // Reverse
+    // Initialize HC-SR04 Ultrasonic Sensor - Wiring: VCC->5V, GND->GND, Trig->GPIO4, Echo->GPIO36 (with voltage divider!)
+    pinMode(PIN_US_TRIG, OUTPUT); // HC-SR04 Trigger Pin (5V output from ESP32)
+    pinMode(PIN_US_ECHO, INPUT);  // HC-SR04 Echo Pin (5V input - REQUIRES 5V->3.3V voltage divider!)
 
-    // Initialize enhanced sensor pins
-    pinMode(FRONT_ULTRASONIC_TRIG, OUTPUT); // Front US Trig
-    pinMode(FRONT_ULTRASONIC_ECHO, INPUT);  // Front US Echo
-    pinMode(REAR_ULTRASONIC_TRIG, OUTPUT);  // Rear US Trig
-    pinMode(REAR_ULTRASONIC_ECHO, INPUT);   // Rear US Echo
-    pinMode(GAS_SENSOR_ANALOG, INPUT);      // Gas Sensor Analog
-    pinMode(GAS_SENSOR_DIGITAL, INPUT);     // Gas Sensor Digital
-    pinMode(SMOKE_SENSOR_ANALOG, INPUT);    // Smoke Sensor Analog
-    pinMode(SMOKE_SENSOR_DIGITAL, INPUT);   // Smoke Sensor Digital
-    pinMode(BUZZER_PIN, OUTPUT);            // Buzzer
+    // Initialize MQ-2 Gas Sensor - Wiring: VCC->3.3V, GND->GND, A0->GPIO32, D0->GPIO33
+    pinMode(PIN_GAS_ANALOG, INPUT);  // MQ-2 Gas Sensor Analog Output (A0)
+    pinMode(PIN_GAS_DIGITAL, INPUT); // MQ-2 Gas Sensor Digital Output (D0/Buzzer)
 
-    // Initialize UART pins for Front ESP32 communication
-    pinMode(UART_TX, OUTPUT);
-    pinMode(UART_RX, INPUT);
+    // Initialize UART Master - Wiring: TX22->RX22(Front), RX21->TX23(Front)
+    pinMode(PIN_UART_TX, OUTPUT); // UART TX to Front ESP32 Slave
+    pinMode(PIN_UART_RX, INPUT);  // UART RX from Front ESP32 Slave
 
     // Stop all motors initially
     stopAllRearMotors();
 
     DEBUG_PRINTLN("Six-motor hardware initialized");
-    DEBUG_PRINTLN("Rear Motors: Motor 3 (Left), Motor 4 (Right)");
-    DEBUG_PRINTLN("Front Motors: Controlled via UART to Front ESP32");
+    DEBUG_PRINTLN("Motors: GPIO13,14,18,19,23,27 (L298N Driver)");
+    DEBUG_PRINTLN("Ultrasonic: GPIO4 (Trig), GPIO36 (Echo - requires voltage divider!)");
+    DEBUG_PRINTLN("Gas Sensor: GPIO32 (A0), GPIO33 (D0/Buzzer)");
+    DEBUG_PRINTLN("UART: GPIO22 (TX), GPIO21 (RX) to Front ESP32");
 }
 
 void stopAllRearMotors()
 {
-    // Stop Rear Motor Driver 3
-    analogWrite(MOTOR3_ENA, 0);
-    digitalWrite(MOTOR3_IN1, LOW);
-    digitalWrite(MOTOR3_IN2, LOW);
-
-    // Stop Rear Motor Driver 4
-    analogWrite(MOTOR4_ENA, 0);
-    digitalWrite(MOTOR4_IN1, LOW);
-    digitalWrite(MOTOR4_IN2, LOW);
+    // Stop all rear motors
+    digitalWrite(PIN_MOTOR_1, LOW);
+    digitalWrite(PIN_MOTOR_2, LOW);
+    digitalWrite(PIN_MOTOR_3, LOW);
+    digitalWrite(PIN_MOTOR_4, LOW);
+    digitalWrite(PIN_MOTOR_5, LOW);
+    digitalWrite(PIN_MOTOR_6, LOW);
 }
 
 void setupWiFi()
@@ -384,14 +383,14 @@ void handleMainLoop()
 
 void updateSensors()
 {
-    // Enhanced Front Ultrasonic Sensor with validation
-    digitalWrite(FRONT_ULTRASONIC_TRIG, LOW);
+    // HC-SR04 Ultrasonic Sensor with validation - Wiring: Trig->GPIO4, Echo->GPIO36 (with voltage divider!)
+    digitalWrite(PIN_US_TRIG, LOW);
     delayMicroseconds(2);
-    digitalWrite(FRONT_ULTRASONIC_TRIG, HIGH);
+    digitalWrite(PIN_US_TRIG, HIGH);
     delayMicroseconds(10);
-    digitalWrite(FRONT_ULTRASONIC_TRIG, LOW);
+    digitalWrite(PIN_US_TRIG, LOW);
 
-    long duration = pulseIn(FRONT_ULTRASONIC_ECHO, HIGH, 30000);
+    long duration = pulseIn(PIN_US_ECHO, HIGH, 30000);
     if (duration > 0 && duration < 30000)
     {
         frontDistance = duration * 0.034 / 2;
@@ -412,39 +411,13 @@ void updateSensors()
         frontSensorValid = false;
     }
 
-    // Enhanced Rear Ultrasonic Sensor with validation
-    digitalWrite(REAR_ULTRASONIC_TRIG, LOW);
-    delayMicroseconds(2);
-    digitalWrite(REAR_ULTRASONIC_TRIG, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(REAR_ULTRASONIC_TRIG, LOW);
+    // MQ-2 Gas Sensor with digital threshold check - Wiring: A0->GPIO32, D0->GPIO33
+    gasLevel = analogRead(PIN_GAS_ANALOG);
 
-    duration = pulseIn(REAR_ULTRASONIC_ECHO, HIGH, 30000);
-    if (duration > 0 && duration < 30000)
-    {
-        rearDistance = duration * 0.034 / 2;
-        if (rearDistance >= 2.0 && rearDistance <= 400.0)
-        {
-            rearSensorValid = true;
-            lastRearDistanceTime = millis();
-        }
-        else
-        {
-            rearDistance = 400.0;
-            rearSensorValid = false;
-        }
-    }
-    else
-    {
-        rearDistance = 400.0;
-        rearSensorValid = false;
-    }
-
-    // Enhanced Gas Sensor with digital threshold check
-    gasLevel = analogRead(GAS_SENSOR_ANALOG);
-
-    // Enhanced Smoke Sensor with digital threshold check
-    smokeLevel = analogRead(SMOKE_SENSOR_ANALOG);
+    // Note: Rear distance and smoke sensor removed per pin.md specifications
+    rearDistance = 400.0; // Default value
+    rearSensorValid = false;
+    smokeLevel = 0; // Default value
 }
 
 void validateSensorData()
@@ -514,31 +487,29 @@ void updateMotorControl()
     rearLeftSpeed = constrain(rearLeftSpeed, -255, 255);
     rearRightSpeed = constrain(rearRightSpeed, -255, 255);
 
-    // Update rear motor outputs with enhanced control
-    if (rearLeftSpeed >= 0)
+    // Update rear motor outputs - L298N Driver on GPIO13,14,18,19,23,27
+    // Motor control logic would be implemented here based on L298N pin mapping
+    // For now, using simple digital outputs as placeholder
+    if (rearLeftSpeed != 0)
     {
-        analogWrite(MOTOR3_ENA, rearLeftSpeed);
-        digitalWrite(MOTOR3_IN1, HIGH);
-        digitalWrite(MOTOR3_IN2, LOW);
+        digitalWrite(PIN_MOTOR_1, HIGH);
+        digitalWrite(PIN_MOTOR_2, rearLeftSpeed > 0 ? LOW : HIGH);
     }
     else
     {
-        analogWrite(MOTOR3_ENA, abs(rearLeftSpeed));
-        digitalWrite(MOTOR3_IN1, LOW);
-        digitalWrite(MOTOR3_IN2, HIGH);
+        digitalWrite(PIN_MOTOR_1, LOW);
+        digitalWrite(PIN_MOTOR_2, LOW);
     }
 
-    if (rearRightSpeed >= 0)
+    if (rearRightSpeed != 0)
     {
-        analogWrite(MOTOR4_ENA, rearRightSpeed);
-        digitalWrite(MOTOR4_IN1, HIGH);
-        digitalWrite(MOTOR4_IN2, LOW);
+        digitalWrite(PIN_MOTOR_3, HIGH);
+        digitalWrite(PIN_MOTOR_4, rearRightSpeed > 0 ? LOW : HIGH);
     }
     else
     {
-        analogWrite(MOTOR4_ENA, abs(rearRightSpeed));
-        digitalWrite(MOTOR4_IN1, LOW);
-        digitalWrite(MOTOR4_IN2, HIGH);
+        digitalWrite(PIN_MOTOR_3, LOW);
+        digitalWrite(PIN_MOTOR_4, LOW);
     }
 }
 
@@ -816,7 +787,7 @@ void updateBuzzer()
         {
             static bool buzzerState = false;
             buzzerState = !buzzerState;
-            digitalWrite(BUZZER_PIN, buzzerState);
+            digitalWrite(PIN_GAS_DIGITAL, buzzerState); // Use GPIO33 for buzzer
             lastBuzzerUpdate = now;
         }
 
@@ -824,7 +795,7 @@ void updateBuzzer()
         if (now - emergencyTimestamp >= 5000)
         {
             buzzerActive = false;
-            digitalWrite(BUZZER_PIN, LOW);
+            digitalWrite(PIN_GAS_DIGITAL, LOW);
         }
     }
 }

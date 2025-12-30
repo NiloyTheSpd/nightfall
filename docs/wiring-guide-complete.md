@@ -1,7 +1,7 @@
 # Project Nightfall - Complete Wiring Guide
 
-**Version:** 1.0  
-**Date:** December 29, 2025  
+**Version:** 2.0.0  
+**Date:** December 30, 2025  
 **Project:** Project Nightfall Autonomous Rescue Robot  
 **Classification:** Hardware Assembly Documentation
 
@@ -73,112 +73,216 @@
 
 ## 2. Detailed Pin Connection Specifications
 
-### 2.1 BACK ESP32 (Master Controller)
+### 2.1 REAR MAIN ESP32 (Master Controller)
 
-**Board:** ESP32-WROOM-32 Development Board  
+**Board:** ESP32 DevKit V1 Development Board  
 **Power:** VIN (14.8V), GND  
 **Function:** Master decision-making, WiFi AP, WebSocket server, sensor fusion
+**Version:** 2.0.0 - Updated per pin.md specifications
 
-#### Pin Configuration Table
+#### Complete Pin Configuration Table
 
-| GPIO Pin | Function       | Component Connection           | Wire Color  | Purpose                    |
-| -------- | -------------- | ------------------------------ | ----------- | -------------------------- |
-| **VIN**  | Power Input    | 14.8V from LM2596 Output       | Red (14.8V) | Primary Power (3.7-15V)    |
-| **GND**  | Ground         | System Ground                  | Black       | Common Ground              |
-| **13**   | PWM Output     | L298N ENA (Rear Left Motor)    | Orange      | Speed Control (0-255)      |
-| **23**   | Digital Output | L298N IN1 (Rear Left Forward)  | Yellow      | Direction Control          |
-| **22**   | Digital Output | L298N IN2 (Rear Left Reverse)  | Blue        | Direction Control          |
-| **25**   | PWM Output     | L298N ENB (Rear Right Motor)   | Orange      | Speed Control (0-255)      |
-| **26**   | Digital Output | L298N IN3 (Rear Right Forward) | Yellow      | Direction Control          |
-| **27**   | Digital Output | L298N IN4 (Rear Right Reverse) | Blue        | Direction Control          |
-| **14**   | Digital Output | Front US Trig                  | Green       | Ultrasonic Trigger         |
-| **18**   | Digital Input  | Front US Echo                  | Purple      | Ultrasonic Echo Response   |
-| **19**   | Digital Output | Rear US Trig                   | Green       | Ultrasonic Trigger         |
-| **21**   | Digital Input  | Rear US Echo                   | Purple      | Ultrasonic Echo Response   |
-| **32**   | Analog Input   | Gas Sensor Analog              | Brown       | Gas Level Reading (0-4095) |
-| **4**    | Digital Output | Buzzer                         | Red         | Audio Alert (5V)           |
-| **16**   | UART TX        | To Front ESP32 RX (Serial2)    | Yellow      | Master-to-Slave Comm       |
-| **17**   | UART RX        | From Front ESP32 TX (Serial2)  | White       | Slave-to-Master Comm       |
+| GPIO Pin | Function       | Component Connection          | Wire Color  | Voltage Level | Purpose                 | Safety Notes                 |
+| -------- | -------------- | ----------------------------- | ----------- | ------------- | ----------------------- | ---------------------------- |
+| **VIN**  | Power Input    | 14.8V from LM2596 Output      | Red (14.8V) | 14.8V         | Primary Power           | ✅ 5-15V acceptable range    |
+| **3V3**  | Power Output   | 3.3V (600mA max)              | Red (3.3V)  | 3.3V          | Logic Power             | ⚠️ Limited current capacity  |
+| **GND**  | Ground         | System Ground                 | Black       | 0V            | Common Ground           | ✅ Star ground configuration |
+| **13**   | PWM Output     | L298N Motor Control           | Orange      | 3.3V          | Motor Speed Control     | ✅ Safe GPIO, PWM capable    |
+| **14**   | Digital Output | L298N Motor Control           | Yellow      | 3.3V          | Motor Direction Control | ✅ Safe GPIO                 |
+| **18**   | Digital Output | L298N Motor Control           | Blue        | 3.3V          | Motor Direction Control | ✅ Safe GPIO                 |
+| **19**   | Digital Output | L298N Motor Control           | Green       | 3.3V          | Motor Direction Control | ✅ Safe GPIO                 |
+| **23**   | Digital Output | L298N Motor Control           | Purple      | 3.3V          | Motor Direction Control | ✅ Safe GPIO                 |
+| **27**   | Digital Output | L298N Motor Control           | Brown       | 3.3V          | Motor Speed Control     | ✅ Safe GPIO, PWM capable    |
+| **4**    | Digital Output | HC-SR04 Ultrasonic Trig       | Green       | 3.3V→5V       | Ultrasonic Trigger      | ✅ Safe GPIO, ADC2_CH0       |
+| **36**   | Digital Input  | HC-SR04 Ultrasonic Echo       | Purple      | 5V→3.3V⚠️     | Ultrasonic Echo         | ⚠️ REQUIRES voltage divider! |
+| **32**   | Analog Input   | MQ-2 Gas Sensor Analog (A0)   | Brown       | 0-3.3V        | Gas Level Reading       | ✅ Safe ADC, ADC1_CH4        |
+| **33**   | Digital Input  | MQ-2 Gas Sensor Digital (D0)  | Red         | 0-3.3V        | Gas Detection           | ✅ Safe ADC, ADC1_CH5        |
+| **22**   | UART TX        | To Front ESP32 RX (Serial2)   | Yellow      | 3.3V          | Master-to-Slave Comm    | ✅ Safe I2C/SCL              |
+| **21**   | UART RX        | From Front ESP32 TX (Serial2) | White       | 3.3V          | Slave-to-Master Comm    | ✅ Safe I2C/SDA              |
 
-#### Detailed Connection Notes
+#### Voltage Divider Requirement for HC-SR04 Echo
 
-**Motor Control (Rear Motors):**
+**⚠️ CRITICAL:** GPIO36 receives 5V from HC-SR04 Echo pin - **MUST use voltage divider!**
 
-- **GPIO 13, 23, 22:** Control rear left motor through L298N
-- **GPIO 25, 26, 27:** Control rear right motor through L298N
-- L298N must be powered by 14.8V directly from battery
+**Recommended Voltage Divider:**
 
-**Ultrasonic Sensors:**
+```
+HC-SR04 Echo (5V) → [1kΩ resistor] → GPIO36 → [2kΩ resistor] → GND
+                         ↓
+                   Voltage at GPIO36 = 3.33V ✓
+```
 
-- **GPIO 14, 18:** Front ultrasonic sensor (HC-SR04)
-- **GPIO 19, 21:** Rear ultrasonic sensor (HC-SR04)
-- Both sensors require 5V power from LM2596
+**Alternative:** 10kΩ + 20kΩ for lower current draw
 
-**Safety Systems:**
+**Wiring:**
 
-- **GPIO 32:** MQ-2 gas sensor analog output (requires 5V)
-- **GPIO 4:** Active buzzer (5V, ~30mA)
+- HC-SR04 Echo → 1kΩ resistor → GPIO36
+- GPIO36 → 2kΩ resistor → GND
+- Verify voltage at GPIO36 is ≤3.3V
 
-**Communication:**
+#### Detailed Connection Notes - Updated per pin.md
 
-- **GPIO 16, 17:** UART2 to Front ESP32 (115200 baud)
+**Motor Control (L298N Driver):**
 
-### 2.2 FRONT ESP32 (Motor Controller)
+- **GPIO 13,14,18,19,23,27:** Six motor control pins for single L298N driver
+- Motors powered by 14.8V directly from battery
+- PWM speed control on GPIO13 and GPIO27
+- Direction control on GPIO14,18,19,23
 
-**Board:** ESP32-WROOM-32 Development Board  
+**HC-SR04 Ultrasonic Sensor:**
+
+- **GPIO 4:** Ultrasonic Trigger (5V output from ESP32)
+- **GPIO 36:** Ultrasonic Echo (5V input - **REQUIRES 5V→3.3V voltage divider!**)
+- Sensor powered by 5V from LM2596
+- **Critical:** Use voltage divider on Echo pin to protect ESP32
+
+**MQ-2 Gas Sensor:**
+
+- **GPIO 32:** Gas sensor analog output (A0 - 0-3.3V)
+- **GPIO 33:** Gas sensor digital output (D0/Buzzer)
+- Sensor powered by 3.3V from ESP32
+- Buzzer function integrated on GPIO33
+
+**UART Communication:**
+
+- **GPIO 22 (TX), GPIO 21 (RX):** UART2 to Front ESP32 (115200 baud)
+- Cross-connection: Rear GPIO22 (TX) ↔ Front GPIO22 (RX), Rear GPIO21 (RX) ↔ Front GPIO23 (TX)
+
+### 2.2 FRONT SLAVE ESP32 (Motor Controller)
+
+**Board:** ESP32 DevKit V1 Development Board  
 **Power:** VIN (5V), GND  
 **Function:** Motor execution, receives commands via UART
+**Version:** 2.0.0 - Updated per pin.md specifications
 
-#### Pin Configuration Table
+#### Complete Pin Configuration Table
 
-| GPIO Pin | Function       | Component Connection           | Wire Color | Purpose               |
-| -------- | -------------- | ------------------------------ | ---------- | --------------------- |
-| **VIN**  | Power Input    | 5V from LM2596 Output          | Red (5V)   | Logic Power (3.7-15V) |
-| **GND**  | Ground         | System Ground                  | Black      | Common Ground         |
-| **13**   | PWM Output     | L298N #1 ENA (Front Left)      | Orange     | Speed Control         |
-| **23**   | Digital Output | L298N #1 IN1 (Front Left Fwd)  | Yellow     | Direction Control     |
-| **22**   | Digital Output | L298N #1 IN2 (Front Left Rev)  | Blue       | Direction Control     |
-| **25**   | PWM Output     | L298N #1 ENB (Front Right)     | Orange     | Speed Control         |
-| **26**   | Digital Output | L298N #1 IN3 (Front Right Fwd) | Yellow     | Direction Control     |
-| **27**   | Digital Output | L298N #1 IN4 (Front Right Rev) | Blue       | Direction Control     |
-| **14**   | PWM Output     | L298N #2 ENA (Aux Left)        | Orange     | Speed Control         |
-| **32**   | Digital Output | L298N #2 IN1 (Aux Left Fwd)    | Yellow     | Direction Control     |
-| **33**   | Digital Output | L298N #2 IN2 (Aux Left Rev)    | Blue       | Direction Control     |
-| **15**   | PWM Output     | L298N #2 ENB (Aux Right)       | Orange     | Speed Control         |
-| **19**   | Digital Output | L298N #2 IN3 (Aux Right Fwd)   | Yellow     | Direction Control     |
-| **21**   | Digital Output | L298N #2 IN4 (Aux Right Rev)   | Blue       | Direction Control     |
-| **16**   | UART RX        | From Back ESP32 TX             | White      | Master-to-Slave Comm  |
-| **17**   | UART TX        | To Back ESP32 RX               | Yellow     | Slave-to-Master Comm  |
+| GPIO Pin | Function       | Component Connection  | Wire Color | Voltage Level | Purpose              | L298N Driver Assignment |
+| -------- | -------------- | --------------------- | ---------- | ------------- | -------------------- | ----------------------- |
+| **VIN**  | Power Input    | 5V from LM2596 Output | Red (5V)   | 5V            | Logic Power          | -                       |
+| **3V3**  | Power Output   | 3.3V (600mA max)      | Red (3.3V) | 3.3V          | Sensor Power         | -                       |
+| **GND**  | Ground         | System Ground         | Black      | 0V            | Common Ground        | -                       |
+| **13**   | PWM Output     | L298N Driver 1 ENA    | Orange     | 3.3V          | Motor Speed Control  | Driver 1 Enable A       |
+| **14**   | Digital Output | L298N Driver 1 IN1    | Yellow     | 3.3V          | Direction Control    | Driver 1 Input 1        |
+| **18**   | Digital Output | L298N Driver 1 IN2    | Blue       | 3.3V          | Direction Control    | Driver 1 Input 2        |
+| **19**   | Digital Output | L298N Driver 1 IN4    | Green      | 3.3V          | Direction Control    | Driver 1 Input 4        |
+| **21**   | PWM Output     | L298N Driver 2 ENA    | Purple     | 3.3V          | Motor Speed Control  | Driver 2 Enable A       |
+| **23**   | Digital Output | L298N Driver 2 IN1    | Brown      | 3.3V          | Direction Control    | Driver 2 Input 1        |
+| **25**   | PWM Output     | L298N Driver 1 ENB    | Pink       | 3.3V          | Motor Speed Control  | Driver 1 Enable B       |
+| **26**   | Digital Output | L298N Driver 2 IN3    | Gray       | 3.3V          | Direction Control    | Driver 2 Input 3        |
+| **27**   | Digital Output | L298N Driver 2 IN4    | White      | 3.3V          | Direction Control    | Driver 2 Input 4        |
+| **22**   | UART RX        | From Rear ESP32 TX    | Yellow     | 3.3V          | Master-to-Slave Comm | UART Reception          |
+| **23**   | UART TX        | To Rear ESP32 RX      | Orange     | 3.3V          | Slave-to-Master Comm | UART Transmission       |
 
-#### Motor Driver Assignments
+#### Dual L298N Driver Configuration
 
-**L298N #1 (Main Front Motors):**
+**L298N Driver 1 (Front Motors):**
 
-- GPIO 13, 23, 22: Front left motor
-- GPIO 25, 26, 27: Front right motor
+- GPIO13 → ENA (Enable A - PWM speed)
+- GPIO14 → IN1 (Input 1 - Direction)
+- GPIO18 → IN2 (Input 2 - Direction)
+- GPIO19 → IN3 (Input 3 - Direction)
+- GPIO25 → ENB (Enable B - PWM speed)
 
-**L298N #2 (Auxiliary Motors):**
+**L298N Driver 2 (Center Motors):**
 
-- GPIO 14, 32, 33: Auxiliary left motor
-- GPIO 15, 19, 21: Auxiliary right motor
+- GPIO21 → ENA (Enable A - PWM speed)
+- GPIO23 → IN1 (Input 1 - Direction)
+- GPIO25 → IN2 (Input 2 - Direction)
+- GPIO26 → IN3 (Input 3 - Direction)
+- GPIO27 → IN4 (Input 4 - Direction)
+- GPIO18 → ENB (Enable B - PWM speed)
 
-### 2.3 CAMERA ESP32 (Telemetry Node)
+**Motor Power:** All motors powered by 14.8V battery pack through L298N VIN pins
 
-**Board:** ESP32-CAM Module  
+#### Motor Driver Assignments - Updated per pin.md
+
+**L298N Motor Drivers (2x modules for 9 motors):**
+
+- **GPIO 13,14,18,19,25:** Motor Driver 1 (Front Motors) - 5 pins
+- **GPIO 21,23,25,26,27,18:** Motor Driver 2 (Center Motors) - 6 pins
+- Total: 11 motor control pins across 2 L298N drivers
+- All motors powered by 14.8V battery pack
+- **Note:** GPIO18 and GPIO25 shared between drivers for ENB functionality
+
+### 2.3 ESP32-CAM AI-THINKER (Vision Module)
+
+**Board:** ESP32-CAM AI-Thinker Module  
 **Power:** VIN (5V), GND  
 **Function:** Vision processing, ML inference, telemetry
+**Version:** 2.0.0 - Updated per pin.md specifications
 
-#### Pin Configuration Table
+#### Critical GPIO Constraints
 
-| GPIO Pin | Function       | Component Connection         | Wire Color | Purpose               |
-| -------- | -------------- | ---------------------------- | ---------- | --------------------- |
-| **VIN**  | Power Input    | 5V from LM2596 Output        | Red (5V)   | Logic Power (3.7-15V) |
-| **GND**  | Ground         | System Ground                | Black      | Common Ground         |
-| **4**    | Digital Output | Flash LED                    | Red        | Camera Flash          |
-| **33**   | Digital Output | Status LED                   | Green      | System Status         |
-| **14**   | UART TX        | To Back ESP32 RX (Serial1)   | Yellow     | Telemetry to Master   |
-| **15**   | UART RX        | From Back ESP32 TX (Serial1) | White      | Commands from Master  |
-| **0**    | Boot/Program   | GND during upload, floating  | -          | Programming Mode      |
+⚠️ **IMPORTANT:** ESP32-CAM has severe GPIO limitations:
+
+- **ONLY GPIO33** is reliably safe for external use
+- All other GPIOs are used by camera or SD card interface
+- **GPIO0** must be LOW during programming, floating during operation
+
+#### Complete Pin Configuration Table
+
+| GPIO Pin | Function       | Component Connection        | Wire Color | Voltage Level | Purpose             | Constraints                 |
+| -------- | -------------- | --------------------------- | ---------- | ------------- | ------------------- | --------------------------- |
+| **VIN**  | Power Input    | 5V from LM2596 Output       | Red (5V)   | 5V            | Logic Power         | ✅ Accepts 5V on VIN/USB    |
+| **3V3**  | Power Output   | 3.3V (limited)              | Red (3.3V) | 3.3V          | Limited 3.3V output | ⚠️ Very limited current     |
+| **GND**  | Ground         | System Ground               | Black      | 0V            | Common Ground       | ✅ Multiple ground pins     |
+| **33**   | Digital Output | Status LED (LOW=ON)         | Green      | 3.3V          | System Status       | ✅ ONLY safe external GPIO  |
+| **4**    | Digital Output | Flash LED                   | Red        | 3.3V          | Camera Flash        | ⚠️ Used by camera interface |
+| **0**    | Boot/Program   | GND during upload, floating | -          | -             | Programming Mode    | ⚠️ Boot strap, special use  |
+| **1**    | UART TX        | Serial TX (conflicts)       | Yellow     | 3.3V          | Debug/Programming   | ❌ Conflicts with camera    |
+| **3**    | UART RX        | Serial RX (conflicts)       | White      | 3.3V          | Debug/Programming   | ❌ Conflicts with camera    |
+
+#### Status LED Configuration (GPIO33)
+
+**Built-in Red LED on GPIO33:**
+
+- **Logic:** LOW = LED ON, HIGH = LED OFF (inverted logic)
+- **Wiring:** GPIO33 → Red LED → 220Ω resistor → GND
+- **Purpose:** System status indication, heartbeat, error reporting
+
+**LED Control Examples:**
+
+```cpp
+#define LED_ON  LOW   // Turn LED on
+#define LED_OFF HIGH  // Turn LED off
+
+// Flash pattern for status
+digitalWrite(PIN_STATUS_LED, LED_ON);   // LED on
+delay(100);
+digitalWrite(PIN_STATUS_LED, LED_OFF);  // LED off
+```
+
+#### Camera Interface (Internal)
+
+**Built-in OV2640 Camera:**
+
+- Connected to internal GPIO pins (managed by ESP32-CAM library)
+- Resolution: 640x480 at 10-15 FPS
+- Format: JPEG compression
+- Requires external antenna for stable WiFi
+
+**SD Card Interface (1-bit mode):**
+
+- Use `SD_MMC.begin("/sdcard", true)` for 1-bit mode
+- Frees GPIO12/13 for other use
+- Capacity: Up to 32GB microSD
+
+#### Programming Requirements
+
+**For Uploading Code:**
+
+1. Connect GPIO0 to GND
+2. Press and hold reset button
+3. Upload code via Arduino IDE/PlatformIO
+4. Remove GPIO0-GND connection
+5. Press reset to run
+
+**For Normal Operation:**
+
+1. GPIO0 must be floating (disconnected)
+2. Reset button to restart
+3. Status LED on GPIO33 for monitoring
 
 #### Camera Interface (Internal)
 
@@ -320,12 +424,12 @@ graph TB
 
 ### 4.2 UART Pin Assignments
 
-| Connection        | Back ESP32     | Front ESP32  | ESP32-CAM    | Purpose         |
-| ----------------- | -------------- | ------------ | ------------ | --------------- |
-| **Master-Slave**  | GPIO 16 (TX) → | GPIO 17 (RX) | -            | Motor Commands  |
-|                   | GPIO 17 (RX) ← | GPIO 16 (TX) | -            | Status Updates  |
-| **Master-Vision** | GPIO 14 (TX) → | -            | GPIO 15 (RX) | Vision Commands |
-|                   | GPIO 12 (RX) ← | -            | GPIO 14 (TX) | ML Results      |
+| Connection        | Back ESP32     | Front ESP32  | ESP32-CAM   | Purpose         |
+| ----------------- | -------------- | ------------ | ----------- | --------------- |
+| **Master-Slave**  | GPIO 22 (TX) → | GPIO 22 (RX) | -           | Motor Commands  |
+|                   | GPIO 21 (RX) ← | GPIO 23 (TX) | -           | Status Updates  |
+| **Master-Vision** | GPIO 1 (TX) →  | -            | GPIO 3 (RX) | Vision Commands |
+|                   | GPIO 3 (RX) ←  | -            | GPIO 1 (TX) | ML Results      |
 
 ### 4.3 WiFi Network Configuration
 
@@ -351,6 +455,7 @@ graph TB
 - **Protocol:** WebSocket
 - **Message Format:** JSON
 - **Update Rate:** 500ms telemetry
+- **Max Clients:** 4 simultaneous connections
 
 **WebSocket Client (ESP32-CAM):**
 
@@ -358,6 +463,72 @@ graph TB
 - **Port:** 8888
 - **Heartbeat Interval:** 5 seconds
 - **Auto-reconnect:** 5 second intervals
+
+#### Enhanced Communication Protocols
+
+**UART Master-Slave Communication (115200 baud):**
+
+1. **Message Format:** JSON with type field
+2. **Command Messages:** {"L": speed, "R": speed, "CL": speed, "CR": speed}
+3. **Heartbeat Messages:** {"type": "heartbeat", "source": "front", "emergency": bool}
+4. **Emergency Commands:** {"cmd": "emergency_stop"}, {"cmd": "emergency_reset"}
+5. **Timeout Handling:** 1000ms for emergency stop, 3000ms for connection loss
+
+**WiFi Access Point Configuration:**
+
+- **SSID:** ProjectNightfall
+- **Password:** rescue2025
+- **Security:** WPA2-PSK
+- **Channel:** Auto (2.4GHz)
+- **IP Range:** 192.168.4.0/24
+- **Master IP:** 192.168.4.1 (Back ESP32)
+- **Client Range:** 192.168.4.2-192.168.4.254
+
+**Implementation Steps:**
+
+1. **Initialize UART Communication:**
+
+   ```cpp
+   Serial2.begin(115200);  // Both ESP32 boards
+   ```
+
+2. **Send Motor Commands:**
+
+   ```cpp
+   StaticJsonDocument<256> motorDoc;
+   motorDoc["L"] = leftSpeed;
+   motorDoc["R"] = rightSpeed;
+   String command;
+   serializeJson(motorDoc, command);
+   Serial2.print(command);
+   Serial2.print("\n");
+   ```
+
+3. **Receive Heartbeat:**
+
+   ```cpp
+   if (Serial2.available()) {
+       String message = Serial2.readStringUntil('\n');
+       DynamicJsonDocument doc(256);
+       deserializeJson(doc, message);
+       if (doc["type"] == "heartbeat") {
+           // Process heartbeat
+       }
+   }
+   ```
+
+4. **WiFi Setup (Back ESP32):**
+
+   ```cpp
+   WiFi.softAP("ProjectNightfall", "rescue2025");
+   ```
+
+5. **WebSocket Server (Back ESP32):**
+   ```cpp
+   WebSocketsServer webSocketServer(8888);
+   webSocketServer.begin();
+   webSocketServer.onEvent(handleWebSocketEvent);
+   ```
 
 ---
 
@@ -1539,9 +1710,38 @@ graph TB
 ### Appendix C: Software Configuration
 
 - PlatformIO Configuration Files
-- Pin Assignment Definitions
+- Pin Assignment Definitions (pins.h)
+- Configuration Constants (config.h)
 - Communication Protocol Specifications
 - Calibration Procedures
+- Enhanced Source Files (main_front_enhanced.cpp, main_rear_enhanced.cpp)
+
+#### Enhanced Configuration System
+
+**Project Structure:**
+
+```
+include/
+├── config.h          # Global configuration constants
+└── pins.h            # Detailed pin definitions with safety warnings
+
+src/
+├── main_front_enhanced.cpp    # Enhanced Front ESP32 source
+├── main_rear_enhanced.cpp     # Enhanced Rear ESP32 source
+└── main_camera.cpp            # ESP32-CAM source
+```
+
+**Pin Definition Sources:**
+
+1. **config.h:** Contains conditional pin definitions wrapped in `#ifdef REAR_CONTROLLER`, `#ifdef FRONT_CONTROLLER`, and `#ifdef CAMERA_MODULE`
+2. **pins.h:** Provides detailed pin definitions with comprehensive safety warnings and validation macros
+3. **Enhanced Source Files:** Include both headers and define controller type for conditional compilation
+
+**Build Configuration:**
+
+- PlatformIO environment selection determines which pins are compiled
+- Enhanced files automatically include appropriate headers
+- Validation macros ensure pin safety at compile time
 
 ### Appendix D: Troubleshooting Quick Reference
 
@@ -1552,11 +1752,347 @@ graph TB
 
 ---
 
+## 11. Pin Configuration Validation & Troubleshooting
+
+### 11.1 Pin Assignment Conflict Detection
+
+#### Cross-Reference Matrix
+
+| Function           | Rear ESP32          | Front ESP32                | ESP32-CAM      | Status | Notes            |
+| ------------------ | ------------------- | -------------------------- | -------------- | ------ | ---------------- |
+| **Motor Control**  | 13,14,18,19,23,27   | 13,14,18,19,21,23,25,26,27 | None           | ✅ OK  | No conflicts     |
+| **Gas Sensor**     | 32 (A0), 33 (D0)    | None                       | None           | ✅ OK  | Rear only        |
+| **Ultrasonic**     | 4 (Trig), 36 (Echo) | None                       | None           | ✅ OK  | Rear only        |
+| **UART Master**    | 22 (TX), 21 (RX)    | 22 (RX), 23 (TX)           | 1 (TX), 3 (RX) | ✅ OK  | Cross-connected  |
+| **Status/Buzzer**  | 33 (Buzzer)         | None                       | 33 (LED)       | ✅ OK  | Different boards |
+| **Camera Control** | None                | None                       | Internal pins  | ✅ OK  | Internal only    |
+
+#### GPIO Safety Verification
+
+**Safe GPIO Pins by Board:**
+
+| Board               | Safe GPIO Range               | Excluded Pins       | Reason                   |
+| ------------------- | ----------------------------- | ------------------- | ------------------------ |
+| **ESP32 DevKit V1** | 13,14,18,19,21-23,25-27,32-33 | 0-12,15-17,20,34-39 | Bootstrap/Flash/ADC-only |
+| **ESP32-CAM**       | 33 only                       | 0-32,34-39          | Camera/SD conflict       |
+
+### 11.2 Voltage Level Validation
+
+#### Voltage Compatibility Matrix
+
+| Signal Source     | Voltage Level | Target GPIO    | Compatible | Notes                         |
+| ----------------- | ------------- | -------------- | ---------- | ----------------------------- |
+| **L298N Control** | 3.3V          | All ESP32 GPIO | ✅ Yes     | Safe, bidirectional           |
+| **HC-SR04 Trig**  | 3.3V→5V       | GPIO4          | ✅ Yes     | 3.3V triggers 5V sensor       |
+| **HC-SR04 Echo**  | 5V            | GPIO36         | ❌ No      | **REQUIRES voltage divider!** |
+| **MQ-2 Analog**   | 0-3.3V        | GPIO32         | ✅ Yes     | Direct ADC connection         |
+| **MQ-2 Digital**  | 0-3.3V        | GPIO33         | ✅ Yes     | Direct digital input          |
+| **ESP32-CAM LED** | 3.3V          | GPIO33         | ✅ Yes     | Safe for LED driving          |
+
+#### Required Voltage Dividers
+
+**HC-SR04 Echo Pin (5V → 3.3V):**
+
+```
+Circuit: HC-SR04 Echo → [1kΩ] → GPIO36 → [2kΩ] → GND
+
+Calculation:
+Vout = Vin × (R2 / (R1 + R2))
+Vout = 5V × (2000 / (1000 + 2000))
+Vout = 3.33V ✓ SAFE
+```
+
+**Alternative Components:**
+
+- 1kΩ + 2kΩ resistors (recommended)
+- 10kΩ + 20kΩ resistors (lower current)
+- Dedicated level shifter IC (professional)
+
+### 11.3 Common Pin Configuration Issues
+
+#### Issue 1: HC-SR04 Echo Pin Damage
+
+**Symptoms:**
+
+- ESP32 GPIO pin damaged (no response)
+- Readings always high or low
+- ESP32 restarts when ultrasonic active
+
+**Cause:** Direct connection of 5V HC-SR04 Echo to 3.3V ESP32 GPIO
+
+**Solution:**
+
+1. Install voltage divider: 1kΩ + 2kΩ resistors
+2. Verify voltage at GPIO36 ≤ 3.3V
+3. Replace damaged ESP32 if necessary
+
+**Prevention:** Always use voltage divider on HC-SR04 Echo!
+
+#### Issue 2: ESP32-CAM GPIO Conflicts
+
+**Symptoms:**
+
+- Camera doesn't initialize
+- Random system crashes
+- GPIO33 LED doesn't work
+
+**Cause:** Using GPIO pins reserved for camera/SD interface
+
+**Solution:**
+
+1. Use only GPIO33 for external connections
+2. Remove connections to GPIO0,2,4,12-16
+3. Use GPIO0 floating for normal operation
+
+**Prevention:** Follow ESP32-CAM GPIO restrictions strictly
+
+#### Issue 3: UART Cross-Connection Errors
+
+**Symptoms:**
+
+- No communication between ESP32 boards
+- Garbled data transmission
+- Timeout errors
+
+**Cause:** Incorrect TX/RX cross-connection
+
+**Correct Wiring:**
+
+```
+Rear ESP32 TX (GPIO22) → Front ESP32 RX (GPIO22)
+Rear ESP32 RX (GPIO21) → Front ESP32 TX (GPIO23)
+```
+
+**Verification:**
+
+1. Check physical connections
+2. Verify pin numbers in code match wiring
+3. Test with loopback connection
+
+#### Issue 4: Motor Driver Pin Conflicts
+
+**Symptoms:**
+
+- Motors don't respond to commands
+- Unexpected motor behavior
+- L298N overheating
+
+**Cause:** Incorrect pin assignments or conflicts
+
+**Verification Steps:**
+
+1. Check pin assignments match pin.md
+2. Verify no GPIO conflicts between drivers
+3. Test each motor individually
+4. Check power connections (14.8V motors, 5V logic)
+
+### 11.4 Pin Configuration Testing Procedures
+
+#### Test 1: GPIO Safety Verification
+
+**Objective:** Ensure all GPIO pins are within safe operating limits
+
+**Procedure:**
+
+```cpp
+// Test script to verify pin configurations
+void validatePinConfiguration() {
+    // Check Rear ESP32 pins
+    #ifdef REAR_CONTROLLER
+    assert(VALIDATE_PIN(PIN_MOTOR_1));     // GPIO13
+    assert(VALIDATE_PIN(PIN_GAS_ANALOG));  // GPIO32
+    assert(VALIDATE_PIN(PIN_US_ECHO));     // GPIO36
+    #endif
+
+    // Check Front ESP32 pins
+    #ifdef FRONT_CONTROLLER
+    assert(VALIDATE_PIN(PIN_DRIVER1_ENA)); // GPIO13
+    assert(VALIDATE_PIN(PIN_UART_RX));     // GPIO22
+    #endif
+
+    // Check ESP32-CAM pins
+    #ifdef CAMERA_MODULE
+    assert(PIN_STATUS_LED == 33);          // Only GPIO33 safe
+    #endif
+}
+```
+
+**Expected Result:** All assertions pass
+
+#### Test 2: Voltage Level Testing
+
+**Objective:** Verify voltage levels on all critical pins
+
+**Required Equipment:**
+
+- Digital multimeter
+- Oscilloscope (recommended)
+- Variable power supply
+
+**Test Points:**
+
+| Test Point                 | Expected Voltage | Measurement Method        |
+| -------------------------- | ---------------- | ------------------------- |
+| **HC-SR04 Echo at GPIO36** | 0V or 3.3V       | Multimeter, verify ≤3.3V  |
+| **MQ-2 A0 at GPIO32**      | 0-3.3V           | ADC reading or multimeter |
+| **L298N Control Signals**  | 0V or 3.3V       | Oscilloscope              |
+| **UART TX/RX Lines**       | 0V or 3.3V       | Oscilloscope              |
+
+#### Test 3: Functional Pin Testing
+
+**Objective:** Verify each pin functions as intended
+
+**Motor Control Test:**
+
+```cpp
+void testMotorPins() {
+    // Test each motor control pin
+    for(int pin : {PIN_MOTOR_1, PIN_MOTOR_2, PIN_MOTOR_3,
+                   PIN_MOTOR_4, PIN_MOTOR_5, PIN_MOTOR_6}) {
+        pinMode(pin, OUTPUT);
+        digitalWrite(pin, HIGH);
+        delay(100);
+        digitalWrite(pin, LOW);
+        delay(100);
+    }
+}
+```
+
+**Sensor Input Test:**
+
+```cpp
+void testSensorPins() {
+    // Test gas sensor analog input
+    int gasReading = analogRead(PIN_GAS_ANALOG);
+    Serial.println("Gas sensor: " + String(gasReading));
+
+    // Test ultrasonic pins
+    digitalWrite(PIN_US_TRIG, LOW);
+    delayMicroseconds(2);
+    digitalWrite(PIN_US_TRIG, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(PIN_US_TRIG, LOW);
+
+    long duration = pulseIn(PIN_US_ECHO, HIGH);
+    Serial.println("Ultrasonic: " + String(duration));
+}
+```
+
+#### Test 4: Communication Testing
+
+**Objective:** Verify UART communication between boards
+
+**Loopback Test:**
+
+```cpp
+// On each ESP32
+void testUARTLoopback() {
+    Serial2.println("TEST_MESSAGE");
+    delay(100);
+
+    if(Serial2.available()) {
+        String received = Serial2.readString();
+        Serial.println("Received: " + received);
+
+        if(received == "TEST_MESSAGE") {
+            Serial.println("✅ UART Loopback OK");
+        } else {
+            Serial.println("❌ UART Loopback FAIL");
+        }
+    }
+}
+```
+
+**Cross-Board Test:**
+
+1. Connect Rear ESP32 TX → Front ESP32 RX
+2. Connect Rear ESP32 RX ← Front ESP32 TX
+3. Test message transmission both ways
+4. Verify data integrity
+
+### 11.5 Pin Configuration Best Practices
+
+#### Code Organization
+
+1. **Use pins.h for all pin definitions**
+2. **Define board-specific pins with #ifdef guards**
+3. **Include detailed comments for each pin**
+4. **Use descriptive pin names**
+
+#### Documentation Requirements
+
+1. **Maintain pin.md as single source of truth**
+2. **Update wiring guide when pin assignments change**
+3. **Include voltage requirements in all documentation**
+4. **Document any GPIO limitations**
+
+#### Hardware Considerations
+
+1. **Always use voltage dividers for 5V→3.3V conversion**
+2. **Verify current capacity of 3.3V rail**
+3. **Use appropriate wire gauges for current levels**
+4. **Implement proper grounding scheme**
+
+#### Testing Protocol
+
+1. **Test each pin individually before integration**
+2. **Verify voltage levels with measurement**
+3. **Test communication links end-to-end**
+4. **Validate sensor readings against known standards**
+
+### 11.6 Emergency Pin Reconfiguration
+
+#### Quick Pin Swap Procedure
+
+If pin assignments need to be changed urgently:
+
+1. **Update pins.h with new assignments**
+2. **Modify hardware wiring to match**
+3. **Update config.h if necessary**
+4. **Test thoroughly before deployment**
+
+#### Backup Pin Assignments
+
+**Reserved pins for emergency use:**
+
+| Board               | Reserved Pins | Current Use | Emergency Reassignment |
+| ------------------- | ------------- | ----------- | ---------------------- |
+| **ESP32 DevKit V1** | 25,26         | Available   | Motor control backup   |
+| **ESP32-CAM**       | None          | GPIO33 only | Cannot reassign        |
+
+### 11.7 Pin Configuration Change Log
+
+#### Version 2.0.0 (December 30, 2025)
+
+**Changes Made:**
+
+- ✅ Aligned all pin assignments with pin.md specifications
+- ✅ Added comprehensive voltage safety warnings
+- ✅ Implemented HC-SR04 voltage divider requirements
+- ✅ Clarified ESP32-CAM GPIO limitations
+- ✅ Created dedicated pins.h file
+- ✅ Enhanced documentation with troubleshooting guides
+
+**Pin Assignments Verified:**
+
+- Rear ESP32: 6 motor + 2 sensor + 2 UART pins
+- Front ESP32: 9 motor + 2 UART pins
+- ESP32-CAM: 1 status LED pin only
+
+**Safety Improvements:**
+
+- Added voltage divider specifications
+- Included GPIO safety warnings
+- Enhanced documentation for voltage constraints
+- Provided comprehensive troubleshooting procedures
+
+---
+
 **Document Control:**
 
-- **Version:** 1.0
-- **Last Updated:** December 29, 2025
-- **Next Review:** March 29, 2026
+- **Version:** 2.0.0
+- **Last Updated:** December 30, 2025
+- **Next Review:** March 30, 2026
 - **Approval:** Hardware Engineering Team
 
 **© 2025 Project Nightfall Team**  
