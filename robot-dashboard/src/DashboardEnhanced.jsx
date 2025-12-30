@@ -158,11 +158,12 @@ export default function DashboardEnhanced() {
   const [lastCommand, setLastCommand] = useState(null);
 
   // --- Mission and navigation state ---
-  const [mode, setMode] = useState<'manual' | 'autonomous'>('manual');
+  const [mode, setMode] = useState('manual');
   const [robotState, setRobotState] = useState('IDLE');
   const [waypoints, setWaypoints] = useState([]);
   const [currentWaypoint, setCurrentWaypoint] = useState(0);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [isPaused, setIsPaused] = useState(false); // Moved before functions that use it
   const [robotPosition, setRobotPosition] = useState({ x: 400, y: 200 });
   const canvasRef = useRef(null);
 
@@ -190,6 +191,26 @@ export default function DashboardEnhanced() {
   const WEBSOCKET_URL = 'ws://192.168.4.1:8888';
   const RECONNECT_DELAYS = [2000, 4000, 8000, 16000]; // Exponential backoff
   const COMMAND_THROTTLE = 50; // Minimum ms between commands
+
+  // --- Safe telemetry access helper ---
+  const getSafeTelemetry = useCallback((telemetryData, fallback = {}) => {
+    if (!telemetryData || typeof telemetryData !== 'object') {
+      return fallback;
+    }
+    return {
+      back_status: telemetryData.back_status || 'offline',
+      front_status: telemetryData.front_status || false,
+      camera_status: telemetryData.camera_status || false,
+      dist: telemetryData.dist || 0,
+      gas: telemetryData.gas || 0,
+      cam_ip: telemetryData.cam_ip || '192.168.4.3',
+      battery: telemetryData.battery || 14.8,
+      signal_strength: telemetryData.signal_strength || 0,
+      uptime: telemetryData.uptime || 0,
+      ...fallback,
+      ...telemetryData
+    };
+  }, []);
 
   // --- Utility functions ---
   const addAlert = useCallback((message, type = 'info', duration = 5000) => {
@@ -266,9 +287,10 @@ export default function DashboardEnhanced() {
           }
 
           if (data.type === 'telemetry') {
-            setTelemetry(data.payload);
-            updateSystemHealth(data.payload);
-            addTelemetryPoint(data.payload); // Add to history for charts
+            const safeTelemetry = getSafeTelemetry(data.payload);
+            setTelemetry(safeTelemetry);
+            updateSystemHealth(safeTelemetry);
+            addTelemetryPoint(safeTelemetry); // Add to history for charts
             
             // Update performance metrics
             setPerformanceMetrics(prev => ({
@@ -578,8 +600,7 @@ export default function DashboardEnhanced() {
     addWaypoint(x, y);
   }, [addWaypoint]);
 
-  // Mission navigation simulation
-  const [isPaused, setIsPaused] = useState(false);
+  // Mission navigation simulation - isPaused state moved to line 166
 
   useEffect(() => {
     if (!isNavigating || isPaused || waypoints.length === 0) return;
@@ -737,8 +758,8 @@ export default function DashboardEnhanced() {
       <FullscreenVideo
         isOpen={showFullscreenVideo}
         onClose={() => setShowFullscreenVideo(false)}
-        cameraIp={telemetry.cam_ip}
-        cameraStatus={telemetry.camera_status}
+        cameraIp={telemetry?.cam_ip || '192.168.4.3'}
+        cameraStatus={telemetry?.camera_status || false}
       />
 
       {/* Header */}
@@ -800,13 +821,6 @@ export default function DashboardEnhanced() {
           </div>
         </div>
       </header>
-                <div className="text-gray-400">Latency</div>
-                <div className="font-mono">{connectionStats.averageLatency}ms</div>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
 
       {/* Three-Zone Layout */}
       <div className="px-6 pb-6">
@@ -857,9 +871,9 @@ export default function DashboardEnhanced() {
                   Live Vision Feed
                 </h2>
                 <div className="flex items-center gap-4">
-                  <div className={`flex items-center gap-2 ${telemetry.camera_status ? 'text-green-400' : 'text-red-400'}`}>
+                  <div className={`flex items-center gap-2 ${telemetry?.camera_status ? 'text-green-400' : 'text-red-400'}`}>
                     <Circle className="w-3 h-3 fill-current animate-pulse" />
-                    <span className="text-sm">{telemetry.camera_status ? 'Streaming' : 'Offline'}</span>
+                    <span className="text-sm">{telemetry?.camera_status ? 'Streaming' : 'Offline'}</span>
                   </div>
                   <div className="text-sm text-gray-400">
                     FPS: {videoFps}
@@ -877,10 +891,10 @@ export default function DashboardEnhanced() {
               </div>
 
               <div className="bg-black rounded-lg overflow-hidden aspect-video border-2 border-gray-700 relative group">
-                {telemetry.camera_status ? (
+                {telemetry?.camera_status ? (
                   <>
                     <img 
-                      src={`http://${telemetry.cam_ip}:81/stream`}
+                      src={`http://${telemetry?.cam_ip || '192.168.4.3'}:81/stream`}
                       alt="Robot camera feed"
                       className="w-full h-full object-cover"
                       onLoad={() => fpsCounterRef.current.frames++}
@@ -892,19 +906,19 @@ export default function DashboardEnhanced() {
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between items-center">
                           <span className="text-gray-300">Distance:</span>
-                          <span className={`font-mono font-bold ${getDistanceColor(telemetry.dist)}`}>
-                            {Math.round(telemetry.dist)}cm
+                          <span className={`font-mono font-bold ${getDistanceColor(telemetry?.dist || 0)}`}>
+                            {Math.round(telemetry?.dist || 0)}cm
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-gray-300">Gas Level:</span>
-                          <span className={`font-mono font-bold ${getGasColor(telemetry.gas)}`}>
-                            {Math.round(telemetry.gas)}
+                          <span className={`font-mono font-bold ${getGasColor(telemetry?.gas || 0)}`}>
+                            {Math.round(telemetry?.gas || 0)}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-gray-300">Camera IP:</span>
-                          <span className="font-mono text-blue-400">{telemetry.cam_ip}</span>
+                          <span className="font-mono text-blue-400">{telemetry?.cam_ip || '192.168.4.3'}</span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-gray-300">Time:</span>
@@ -977,17 +991,17 @@ export default function DashboardEnhanced() {
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-400 flex items-center gap-2">
-                      <Battery className={`w-4 h-4 ${getBatteryColor(telemetry.battery)}`} />
+                      <Battery className={`w-4 h-4 ${getBatteryColor(telemetry?.battery || 14.8)}`} />
                       Battery
                     </span>
-                    <span className={`font-mono font-bold ${getBatteryColor(telemetry.battery)}`}>
-                      {telemetry.battery.toFixed(1)}V
+                    <span className={`font-mono font-bold ${getBatteryColor(telemetry?.battery || 14.8)}`}>
+                      {(telemetry?.battery || 14.8).toFixed(1)}V
                     </span>
                   </div>
                   <div className="metric-bar">
                     <div 
-                      className={`metric-fill ${getBatteryColor(telemetry.battery).replace('text-', 'bg-')}`}
-                      style={{ width: `${Math.max(0, Math.min((telemetry.battery - 11) / (14.8 - 11) * 100, 100))}%` }}
+                      className={`metric-fill ${getBatteryColor(telemetry?.battery || 14.8).replace('text-', 'bg-')}`}
+                      style={{ width: `${Math.max(0, Math.min(((telemetry?.battery || 14.8) - 11) / (14.8 - 11) * 100, 100))}%` }}
                     ></div>
                   </div>
                 </div>
@@ -1000,13 +1014,13 @@ export default function DashboardEnhanced() {
                       WiFi Signal
                     </span>
                     <span className="font-mono font-bold text-blue-400">
-                      {telemetry.signal_strength}%
+                      {telemetry?.signal_strength || 0}%
                     </span>
                   </div>
                   <div className="metric-bar">
                     <div 
                       className="metric-fill bg-blue-500"
-                      style={{ width: `${telemetry.signal_strength}%` }}
+                      style={{ width: `${telemetry?.signal_strength || 0}%` }}
                     ></div>
                   </div>
                 </div>
@@ -1018,14 +1032,14 @@ export default function DashboardEnhanced() {
                       <Wind className="w-4 h-4" />
                       Gas Level
                     </span>
-                    <span className={`font-mono font-bold ${getGasColor(telemetry.gas)}`}>
-                      {Math.round(telemetry.gas)}
+                    <span className={`font-mono font-bold ${getGasColor(telemetry?.gas || 0)}`}>
+                      {Math.round(telemetry?.gas || 0)}
                     </span>
                   </div>
                   <div className="metric-bar">
                     <div 
-                      className={`metric-fill ${getGasColor(telemetry.gas).replace('text-', 'bg-')}`}
-                      style={{ width: `${Math.min(telemetry.gas / 4095 * 100, 100)}%` }}
+                      className={`metric-fill ${getGasColor(telemetry?.gas || 0).replace('text-', 'bg-')}`}
+                      style={{ width: `${Math.min((telemetry?.gas || 0) / 4095 * 100, 100)}%` }}
                     ></div>
                   </div>
                 </div>
@@ -1038,7 +1052,7 @@ export default function DashboardEnhanced() {
                       Uptime
                     </span>
                     <span className="font-mono font-bold text-green-400">
-                      {Math.floor(telemetry.uptime / 3600)}h {Math.floor((telemetry.uptime % 3600) / 60)}m
+                      {Math.floor((telemetry?.uptime || 0) / 3600)}h {Math.floor(((telemetry?.uptime || 0) % 3600) / 60)}m
                     </span>
                   </div>
                 </div>
@@ -1070,7 +1084,7 @@ export default function DashboardEnhanced() {
               {/* Data Export */}
               <div className="mt-6 pt-4 border-t border-gray-700">
                 <DataExportPanel
-                  telemetry={telemetry}
+                  telemetry={telemetry || {}}
                   waypoints={waypoints}
                   alerts={alerts}
                   connectionStats={connectionStats}
