@@ -20,8 +20,12 @@
 #include <ArduinoJson.h>
 #include <ArduinoJson.hpp>
 
+// Define controller type for conditional compilation BEFORE including pins.h
+#define CAMERA_MODULE
+
 // Include our libraries
 #include "config.h"
+#include "pins.h"
 
 // Global objects
 WebSocketsClient webSocket;

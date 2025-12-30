@@ -22,12 +22,12 @@
 #include <ArduinoJson.hpp>
 #include <ESPAsyncWebServer.h>
 
+// Define controller type for conditional compilation BEFORE including pins.h
+#define REAR_CONTROLLER
+
 // Include our libraries
 #include "config.h"
 #include "pins.h"
-
-// Define controller type for conditional compilation
-#define REAR_CONTROLLER
 
 // Global objects
 AsyncWebServer webServer(80);

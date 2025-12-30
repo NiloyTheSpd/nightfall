@@ -19,12 +19,12 @@
 #include <ArduinoJson.h>
 #include <ArduinoJson.hpp>
 
+// Define controller type for conditional compilation BEFORE including pins.h
+#define FRONT_CONTROLLER
+
 // Include our libraries
 #include "config.h"
 #include "pins.h"
-
-// Define controller type for conditional compilation
-#define FRONT_CONTROLLER
 
 // System state
 bool systemReady = false;
