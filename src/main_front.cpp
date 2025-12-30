@@ -64,7 +64,7 @@ int targetRightSpeed = 0;
 #define MOTOR2_LEFT_IN2 33
 #endif
 #ifndef MOTOR2_RIGHT_PWM
-#define MOTOR2_RIGHT_PWM 15
+#define MOTOR2_RIGHT_PWM 18
 #endif
 #ifndef MOTOR2_RIGHT_IN1
 #define MOTOR2_RIGHT_IN1 19
@@ -107,7 +107,7 @@ void setup()
     initializeHardware();
 
     // Initialize UART communication
-    Serial2.begin(UART_BAUDRATE);
+    Serial2.begin(UART_BAUDRATE, SERIAL_8N1, 16, 17); // RX=16, TX=17
 
     systemReady = true;
     lastUARTUpdate = millis();
@@ -151,7 +151,7 @@ void initializeHardware()
 
     DEBUG_PRINTLN("Motor control hardware initialized");
     DEBUG_PRINTLN("Motor Driver 1: PWM=13, IN1=23, IN2=22 (Left) | PWM=25, IN1=26, IN2=27 (Right)");
-    DEBUG_PRINTLN("Motor Driver 2: PWM=14, IN1=32, IN2=33 (Left) | PWM=15, IN1=19, IN2=21 (Right)");
+    DEBUG_PRINTLN("Motor Driver 2: PWM=14, IN1=32, IN2=33 (Left) | PWM=18, IN1=19, IN2=21 (Right)");
 }
 
 void handleMainLoop()

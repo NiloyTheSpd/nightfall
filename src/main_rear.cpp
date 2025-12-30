@@ -121,36 +121,35 @@ void initializeHardware()
 {
     DEBUG_PRINTLN("Initializing hardware...");
 
-    // Initialize motor control pins
-    pinMode(13, OUTPUT); // Left Motor PWM
-    pinMode(23, OUTPUT); // Left Motor IN1
-    pinMode(22, OUTPUT); // Left Motor IN2
-    pinMode(25, OUTPUT); // Right Motor PWM
-    pinMode(26, OUTPUT); // Right Motor IN1
-    pinMode(27, OUTPUT); // Right Motor IN2
+    // Initialize motor control pins (L298N driver)
+    pinMode(13, OUTPUT); // Motor PWM 1
+    pinMode(14, OUTPUT); // Motor IN1
+    pinMode(18, OUTPUT); // Motor IN2
+    pinMode(19, OUTPUT); // Motor IN3
+    pinMode(23, OUTPUT); // Motor IN4
+    pinMode(27, OUTPUT); // Motor PWM 2
 
     // Initialize sensor pins
-    pinMode(14, OUTPUT); // Front US Trig
-    pinMode(18, INPUT);  // Front US Echo
-    pinMode(19, OUTPUT); // Rear US Trig
-    pinMode(21, INPUT);  // Rear US Echo
-    pinMode(32, INPUT);  // Gas Sensor Analog
-    pinMode(33, INPUT);  // Gas Sensor Digital
-    pinMode(12, INPUT);  // Smoke Sensor Analog
-    pinMode(13, INPUT);  // Smoke Sensor Digital
-    pinMode(4, OUTPUT);  // Buzzer
+    pinMode(4, OUTPUT);  // HC-SR04 Trig
+    pinMode(36, INPUT);  // HC-SR04 Echo (with voltage divider!)
+    pinMode(32, INPUT);  // MQ-2 Gas Sensor Analog (A0)
+    pinMode(33, OUTPUT); // Buzzer / MQ-2 Digital (shared)
 
-    // Initialize UART pins
-    pinMode(16, OUTPUT); // UART TX
-    pinMode(17, INPUT);  // UART RX
+    // Initialize UART pins (Serial2 - hardware fixed GPIO16/17)
+    pinMode(17, OUTPUT); // UART TX2
+    pinMode(16, INPUT);  // UART RX2
+
+    // Initialize Serial2 for UART communication
+    Serial2.begin(UART_BAUDRATE, SERIAL_8N1, 16, 17); // RX=16, TX=17
 
     // Stop all motors initially
     analogWrite(13, 0);
-    analogWrite(25, 0);
+    analogWrite(27, 0);
+    digitalWrite(14, LOW);
+    digitalWrite(18, LOW);
+    digitalWrite(19, LOW);
     digitalWrite(23, LOW);
-    digitalWrite(22, LOW);
-    digitalWrite(26, LOW);
-    digitalWrite(27, LOW);
+    digitalWrite(33, LOW); // Buzzer off
 
     DEBUG_PRINTLN("Hardware initialized");
 }
@@ -299,47 +298,36 @@ void handleMainLoop()
 
 void updateSensors()
 {
-    // Update Front Ultrasonic Sensor
-    digitalWrite(14, LOW);
+    // Update Front Ultrasonic Sensor (HC-SR04)
+    digitalWrite(4, LOW); // GPIO4 = Trig
     delayMicroseconds(2);
-    digitalWrite(14, HIGH);
+    digitalWrite(4, HIGH);
     delayMicroseconds(10);
-    digitalWrite(14, LOW);
+    digitalWrite(4, LOW);
 
-    long duration = pulseIn(18, HIGH, 30000); // 30ms timeout
+    long duration = pulseIn(36, HIGH, 30000); // GPIO36 = Echo, 30ms timeout
     if (duration > 0)
     {
         frontDistance = duration * 0.034 / 2;
         if (frontDistance > 400)
             frontDistance = 400; // Max range
     }
-
-    // Update Rear Ultrasonic Sensor
-    digitalWrite(19, LOW);
-    delayMicroseconds(2);
-    digitalWrite(19, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(19, LOW);
-
-    duration = pulseIn(21, HIGH, 30000); // 30ms timeout
-    if (duration > 0)
+    else
     {
-        rearDistance = duration * 0.034 / 2;
-        if (rearDistance > 400)
-            rearDistance = 400; // Max range
+        frontDistance = 400; // No echo = max range
     }
 
-    // Update Gas Sensor
-    gasLevel = analogRead(32);
+    // Rear ultrasonic not installed - set to safe default
+    rearDistance = 400;
+
+    // Update Gas Sensor (MQ-2)
+    gasLevel = analogRead(32); // GPIO32 = MQ-2 A0
 }
 
 void checkSafetyConditions()
 {
-    // Read smoke sensor
-    int smokeLevel = analogRead(PIN_SMOKE_ANALOG);
-
-    // SAFETY OVERRIDE: If (FrontDistance < 20cm) OR (Gas > threshold) OR (Smoke > threshold), MUST override commands
-    if (!emergencyStop && (frontDistance < EMERGENCY_STOP_DISTANCE || gasLevel > GAS_THRESHOLD_ANALOG || smokeLevel > 300))
+    // SAFETY OVERRIDE: If (FrontDistance < 20cm) OR (Gas > threshold), MUST override commands
+    if (!emergencyStop && (frontDistance < EMERGENCY_STOP_DISTANCE || gasLevel > GAS_THRESHOLD_ANALOG))
     {
         String reason = "";
         if (frontDistance < EMERGENCY_STOP_DISTANCE)
@@ -349,18 +337,21 @@ void checkSafetyConditions()
         if (gasLevel > GAS_THRESHOLD_ANALOG)
         {
             if (reason.length() > 0)
-                reason += " & ";
-            reason += "Gas level critical: " + String(gasLevel);
+                reason += " | ";
+            reason += "Gas detected: " + String(gasLevel);
         }
-        if (smokeLevel > 300)
-        {
-            if (reason.length() > 0)
-                reason += " & ";
-            reason += "Smoke detected: " + String(smokeLevel);
-        }
-
-        activateEmergencyStop(reason);
+        reason += " & ";
+        reason += "Gas level critical: " + String(gasLevel);
     }
+    if (smokeLevel > 300)
+    {
+        if (reason.length() > 0)
+            reason += " & ";
+        reason += "Smoke detected: " + String(smokeLevel);
+    }
+
+    activateEmergencyStop(reason);
+}
 }
 
 void updateMotorControl()

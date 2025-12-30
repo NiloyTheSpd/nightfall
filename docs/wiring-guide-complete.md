@@ -33,9 +33,11 @@
 
 ### 1.2 Motor Control System
 
+⚠️ **MOTOR DRIVER WARNING:** L298N modules are inefficient (40% power loss) and may overheat with motors drawing 2-4A peaks. **Recommended alternatives:** VNH5019 (30A), BTS7960 (43A), or dual TB6612FNG (3.2A continuous) for better efficiency, thermal protection, and current handling.
+
 | Component          | Quantity | Model/Specification | Purpose       | Unit Cost | Total Cost |
 | ------------------ | -------- | ------------------- | ------------- | --------- | ---------- |
-| L298N Motor Driver | 2        | L298N Dual H-Bridge | Motor Control | $3-5      | $6-10      |
+| L298N Motor Driver | 3        | L298N Dual H-Bridge | Motor Control | $3-5      | $9-15      |
 | DC Gear Motor      | 4        | 12V 500 RPM         | Propulsion    | $8-15     | $32-60     |
 | Robot Wheels       | 4        | 85mm Plastic Tire   | Mobility      | $5-8      | $20-32     |
 
@@ -49,12 +51,16 @@
 
 ### 1.4 Power Management
 
-| Component             | Quantity | Model/Specification | Purpose            | Unit Cost | Total Cost |
-| --------------------- | -------- | ------------------- | ------------------ | --------- | ---------- |
-| 18650 Li-ion Battery  | 4        | 3.7V 2500mAh        | Power Source       | $4-8      | $16-32     |
-| Battery Holder        | 1        | 4-chamber 18650     | Battery Housing    | $3-5      | $3-5       |
-| LM2596 Buck Converter | 1        | LM2596 DC-DC        | Power Regulation   | $2-4      | $2-4       |
-| Rocker Switch         | 1        | SPST On-Off         | Main Power Control | $2-3      | $2-3       |
+⚠️ **CRITICAL:** 4S Li-ion pack (14.8V) requires BMS for cell balancing, overcharge/overdischarge protection, and safe operation.
+
+| Component             | Quantity | Model/Specification       | Purpose                | Unit Cost | Total Cost |
+| --------------------- | -------- | ------------------------- | ---------------------- | --------- | ---------- |
+| 18650 Li-ion Battery  | 4        | 3.7V 2500mAh              | Power Source           | $4-8      | $16-32     |
+| 4S BMS Protection PCB | 1        | 4S 14.8V 10-20A BMS       | Battery Protection     | $5-10     | $5-10      |
+| Battery Holder        | 1        | 4-chamber 18650           | Battery Housing        | $3-5      | $3-5       |
+| LM2596 Buck Converter | 1        | LM2596 DC-DC              | Power Regulation       | $2-4      | $2-4       |
+| Fast-Blow Fuse        | 1        | 10A main + 3-5A per motor | Overcurrent Protection | $1-2      | $3-8       |
+| Rocker Switch         | 1        | SPST On-Off               | Main Power Control     | $2-3      | $2-3       |
 
 ### 1.5 Wiring and Connectors
 
@@ -76,29 +82,31 @@
 ### 2.1 REAR MAIN ESP32 (Master Controller)
 
 **Board:** ESP32 DevKit V1 Development Board  
-**Power:** VIN (14.8V), GND  
+**Power:** VIN (5V), GND  
 **Function:** Master decision-making, WiFi AP, WebSocket server, sensor fusion
 **Version:** 2.0.0 - Updated per pin.md specifications
 
+⚠️ **CRITICAL SAFETY WARNING:** ESP32 VIN accepts maximum 12V on most devkits. **NEVER connect 14.8V directly to VIN!** Always use regulated 5V from LM2596 buck converter.
+
 #### Complete Pin Configuration Table
 
-| GPIO Pin | Function       | Component Connection          | Wire Color  | Voltage Level | Purpose                 | Safety Notes                 |
-| -------- | -------------- | ----------------------------- | ----------- | ------------- | ----------------------- | ---------------------------- |
-| **VIN**  | Power Input    | 14.8V from LM2596 Output      | Red (14.8V) | 14.8V         | Primary Power           | ✅ 5-15V acceptable range    |
-| **3V3**  | Power Output   | 3.3V (600mA max)              | Red (3.3V)  | 3.3V          | Logic Power             | ⚠️ Limited current capacity  |
-| **GND**  | Ground         | System Ground                 | Black       | 0V            | Common Ground           | ✅ Star ground configuration |
-| **13**   | PWM Output     | L298N Motor Control           | Orange      | 3.3V          | Motor Speed Control     | ✅ Safe GPIO, PWM capable    |
-| **14**   | Digital Output | L298N Motor Control           | Yellow      | 3.3V          | Motor Direction Control | ✅ Safe GPIO                 |
-| **18**   | Digital Output | L298N Motor Control           | Blue        | 3.3V          | Motor Direction Control | ✅ Safe GPIO                 |
-| **19**   | Digital Output | L298N Motor Control           | Green       | 3.3V          | Motor Direction Control | ✅ Safe GPIO                 |
-| **23**   | Digital Output | L298N Motor Control           | Purple      | 3.3V          | Motor Direction Control | ✅ Safe GPIO                 |
-| **27**   | Digital Output | L298N Motor Control           | Brown       | 3.3V          | Motor Speed Control     | ✅ Safe GPIO, PWM capable    |
-| **4**    | Digital Output | HC-SR04 Ultrasonic Trig       | Green       | 3.3V→5V       | Ultrasonic Trigger      | ✅ Safe GPIO, ADC2_CH0       |
-| **36**   | Digital Input  | HC-SR04 Ultrasonic Echo       | Purple      | 5V→3.3V⚠️     | Ultrasonic Echo         | ⚠️ REQUIRES voltage divider! |
-| **32**   | Analog Input   | MQ-2 Gas Sensor Analog (A0)   | Brown       | 0-3.3V        | Gas Level Reading       | ✅ Safe ADC, ADC1_CH4        |
-| **33**   | Digital Input  | MQ-2 Gas Sensor Digital (D0)  | Red         | 0-3.3V        | Gas Detection           | ✅ Safe ADC, ADC1_CH5        |
-| **22**   | UART TX        | To Front ESP32 RX (Serial2)   | Yellow      | 3.3V          | Master-to-Slave Comm    | ✅ Safe I2C/SCL              |
-| **21**   | UART RX        | From Front ESP32 TX (Serial2) | White       | 3.3V          | Slave-to-Master Comm    | ✅ Safe I2C/SDA              |
+| GPIO Pin | Function       | Component Connection          | Wire Color | Voltage Level | Purpose                 | Safety Notes                 |
+| -------- | -------------- | ----------------------------- | ---------- | ------------- | ----------------------- | ---------------------------- |
+| **VIN**  | Power Input    | 5V from LM2596 Output         | Red (5V)   | 5V            | Primary Power           | ✅ Regulated 5V ONLY         |
+| **3V3**  | Power Output   | 3.3V (600mA max)              | Red (3.3V) | 3.3V          | Logic Power             | ⚠️ Limited current capacity  |
+| **GND**  | Ground         | System Ground                 | Black      | 0V            | Common Ground           | ✅ Star ground configuration |
+| **13**   | PWM Output     | L298N Motor Control           | Orange     | 3.3V          | Motor Speed Control     | ✅ Safe GPIO, PWM capable    |
+| **14**   | Digital Output | L298N Motor Control           | Yellow     | 3.3V          | Motor Direction Control | ✅ Safe GPIO                 |
+| **18**   | Digital Output | L298N Motor Control           | Blue       | 3.3V          | Motor Direction Control | ✅ Safe GPIO                 |
+| **19**   | Digital Output | L298N Motor Control           | Green      | 3.3V          | Motor Direction Control | ✅ Safe GPIO                 |
+| **23**   | Digital Output | L298N Motor Control           | Purple     | 3.3V          | Motor Direction Control | ✅ Safe GPIO                 |
+| **27**   | Digital Output | L298N Motor Control           | Brown      | 3.3V          | Motor Speed Control     | ✅ Safe GPIO, PWM capable    |
+| **4**    | Digital Output | HC-SR04 Ultrasonic Trig       | Green      | 3.3V→5V       | Ultrasonic Trigger      | ✅ Safe GPIO, ADC2_CH0       |
+| **36**   | Digital Input  | HC-SR04 Ultrasonic Echo       | Purple     | 5V→3.3V⚠️     | Ultrasonic Echo         | ⚠️ REQUIRES 5V→3.3V divider! |
+| **32**   | Analog Input   | MQ-2 Gas Sensor Analog (A0)   | Brown      | 0-3.3V        | Gas Level Reading       | ✅ Safe ADC, ADC1_CH4        |
+| **33**   | Digital Input  | MQ-2 Gas Sensor Digital (D0)  | Red        | 0-3.3V        | Gas Detection           | ✅ Safe ADC, ADC1_CH5        |
+| **17**   | UART TX (TX2)  | To Front ESP32 RX (Serial2)   | Yellow     | 3.3V          | Master-to-Slave Comm    | ✅ Hardware Serial2 TX2      |
+| **16**   | UART RX (RX2)  | From Front ESP32 TX (Serial2) | White      | 3.3V          | Slave-to-Master Comm    | ✅ Hardware Serial2 RX2      |
 
 #### Voltage Divider Requirement for HC-SR04 Echo
 
@@ -145,8 +153,9 @@ HC-SR04 Echo (5V) → [1kΩ resistor] → GPIO36 → [2kΩ resistor] → GND
 
 **UART Communication:**
 
-- **GPIO 22 (TX), GPIO 21 (RX):** UART2 to Front ESP32 (115200 baud)
-- Cross-connection: Rear GPIO22 (TX) ↔ Front GPIO22 (RX), Rear GPIO21 (RX) ↔ Front GPIO23 (TX)
+- **GPIO 17 (TX2), GPIO 16 (RX2):** Hardware Serial2 to Front ESP32 (115200 baud)
+- Cross-connection: Rear GPIO17 (TX2) ↔ Front GPIO16 (RX2), Rear GPIO16 (RX2) ↔ Front GPIO17 (TX2)
+- ⚠️ Serial2 uses **fixed hardware pins** GPIO16/17 on ESP32 - cannot be remapped
 
 ### 2.2 FRONT SLAVE ESP32 (Motor Controller)
 
@@ -162,48 +171,66 @@ HC-SR04 Echo (5V) → [1kΩ resistor] → GPIO36 → [2kΩ resistor] → GND
 | **VIN**  | Power Input    | 5V from LM2596 Output | Red (5V)   | 5V            | Logic Power          | -                       |
 | **3V3**  | Power Output   | 3.3V (600mA max)      | Red (3.3V) | 3.3V          | Sensor Power         | -                       |
 | **GND**  | Ground         | System Ground         | Black      | 0V            | Common Ground        | -                       |
-| **13**   | PWM Output     | L298N Driver 1 ENA    | Orange     | 3.3V          | Motor Speed Control  | Driver 1 Enable A       |
-| **14**   | Digital Output | L298N Driver 1 IN1    | Yellow     | 3.3V          | Direction Control    | Driver 1 Input 1        |
-| **18**   | Digital Output | L298N Driver 1 IN2    | Blue       | 3.3V          | Direction Control    | Driver 1 Input 2        |
-| **19**   | Digital Output | L298N Driver 1 IN4    | Green      | 3.3V          | Direction Control    | Driver 1 Input 4        |
-| **21**   | PWM Output     | L298N Driver 2 ENA    | Purple     | 3.3V          | Motor Speed Control  | Driver 2 Enable A       |
-| **23**   | Digital Output | L298N Driver 2 IN1    | Brown      | 3.3V          | Direction Control    | Driver 2 Input 1        |
-| **25**   | PWM Output     | L298N Driver 1 ENB    | Pink       | 3.3V          | Motor Speed Control  | Driver 1 Enable B       |
-| **26**   | Digital Output | L298N Driver 2 IN3    | Gray       | 3.3V          | Direction Control    | Driver 2 Input 3        |
-| **27**   | Digital Output | L298N Driver 2 IN4    | White      | 3.3V          | Direction Control    | Driver 2 Input 4        |
-| **22**   | UART RX        | From Rear ESP32 TX    | Yellow     | 3.3V          | Master-to-Slave Comm | UART Reception          |
-| **23**   | UART TX        | To Rear ESP32 RX      | Orange     | 3.3V          | Slave-to-Master Comm | UART Transmission       |
+| **13**   | PWM Output     | Motor 1 Left PWM      | Orange     | 3.3V          | Left Motor Speed     | Driver 1 PWM            |
+| **23**   | Digital Output | Motor 1 Left IN1      | Brown      | 3.3V          | Left Direction 1     | Driver 1 IN1            |
+| **22**   | Digital Output | Motor 1 Left IN2      | Yellow     | 3.3V          | Left Direction 2     | Driver 1 IN2            |
+| **25**   | PWM Output     | Motor 1 Right PWM     | Pink       | 3.3V          | Right Motor Speed    | Driver 1 PWM            |
+| **26**   | Digital Output | Motor 1 Right IN1     | Gray       | 3.3V          | Right Direction 1    | Driver 1 IN1            |
+| **27**   | Digital Output | Motor 1 Right IN2     | White      | 3.3V          | Right Direction 2    | Driver 1 IN2            |
+| **14**   | PWM Output     | Motor 2 Left PWM      | Yellow     | 3.3V          | Aux Left Speed       | Driver 2 PWM            |
+| **32**   | Digital Output | Motor 2 Left IN1      | Blue       | 3.3V          | Aux Left Direction 1 | Driver 2 IN1            |
+| **33**   | Digital Output | Motor 2 Left IN2      | Green      | 3.3V          | Aux Left Direction 2 | Driver 2 IN2            |
+| **18**   | PWM Output     | Motor 2 Right PWM     | Purple     | 3.3V          | Aux Right Speed      | Driver 2 PWM ✅ Safe    |
+| **19**   | Digital Output | Motor 2 Right IN1     | Red        | 3.3V          | Aux Right Dir 1      | Driver 2 IN1            |
+| **21**   | Digital Output | Motor 2 Right IN2     | Cyan       | 3.3V          | Aux Right Dir 2      | Driver 2 IN2            |
+| **16**   | UART RX (RX2)  | From Rear ESP32 TX    | Yellow     | 3.3V          | Master-to-Slave Comm | Hardware Serial2 RX2    |
+| **17**   | UART TX (TX2)  | To Rear ESP32 RX      | Orange     | 3.3V          | Slave-to-Master Comm | Hardware Serial2 TX2    |
 
-#### Dual L298N Driver Configuration
+#### L298N Driver Configuration (3 Modules = 6 Motors)
 
-**L298N Driver 1 (Front Motors):**
+**Rear L298N Driver (Back ESP32 - main_rear.cpp, 2 motors):**
 
-- GPIO13 → ENA (Enable A - PWM speed)
-- GPIO14 → IN1 (Input 1 - Direction)
-- GPIO18 → IN2 (Input 2 - Direction)
-- GPIO19 → IN3 (Input 3 - Direction)
-- GPIO25 → ENB (Enable B - PWM speed)
+- GPIO13 → Motor PWM (ENA)
+- GPIO14 → Motor IN1
+- GPIO18 → Motor IN2
+- GPIO19 → Motor IN3
+- GPIO23 → Motor IN4
+- GPIO27 → Motor PWM (ENB)
 
-**L298N Driver 2 (Center Motors):**
+**Front L298N Driver 1 (Main Motors - main_front.cpp):**
 
-- GPIO21 → ENA (Enable A - PWM speed)
-- GPIO23 → IN1 (Input 1 - Direction)
-- GPIO25 → IN2 (Input 2 - Direction)
-- GPIO26 → IN3 (Input 3 - Direction)
-- GPIO27 → IN4 (Input 4 - Direction)
-- GPIO18 → ENB (Enable B - PWM speed)
+- GPIO13 → Left Motor PWM (MOTOR1_LEFT_PWM)
+- GPIO23 → Left Motor IN1 (MOTOR1_LEFT_IN1)
+- GPIO22 → Left Motor IN2 (MOTOR1_LEFT_IN2)
+- GPIO25 → Right Motor PWM (MOTOR1_RIGHT_PWM)
+- GPIO26 → Right Motor IN1 (MOTOR1_RIGHT_IN1)
+- GPIO27 → Right Motor IN2 (MOTOR1_RIGHT_IN2)
 
-**Motor Power:** All motors powered by 14.8V battery pack through L298N VIN pins
+**Front L298N Driver 2 (Auxiliary Motors - main_front.cpp):**
+
+- GPIO14 → Left Motor PWM (MOTOR2_LEFT_PWM)
+- GPIO32 → Left Motor IN1 (MOTOR2_LEFT_IN1)
+- GPIO33 → Left Motor IN2 (MOTOR2_LEFT_IN2)
+- GPIO18 → Right Motor PWM (MOTOR2_RIGHT_PWM) ✅ Safe GPIO
+- GPIO19 → Right Motor IN1 (MOTOR2_RIGHT_IN1)
+- GPIO21 → Right Motor IN2 (MOTOR2_RIGHT_IN2)
+
+**⚠️ IMPORTANT PIN NOTES:**
+
+- **GPIO22 used for Motor 1 IN2** - This is safe since Serial2 actually uses GPIO16/17 (hardware fixed)
+- **All pins verified safe** according to pin.md - no boot strapping conflicts
+- **GPIO15, GPIO5, GPIO12, GPIO2, GPIO0** avoided (boot strap pins)
+
+**Motor Power:** All three L298N drivers powered from the 14.8V battery pack (logic 5V from LM2596)
 
 #### Motor Driver Assignments - Updated per pin.md
 
-**L298N Motor Drivers (2x modules for 9 motors):**
+**L298N Motor Drivers (3x modules for 6 motors):**
 
-- **GPIO 13,14,18,19,25:** Motor Driver 1 (Front Motors) - 5 pins
-- **GPIO 21,23,25,26,27,18:** Motor Driver 2 (Center Motors) - 6 pins
-- Total: 11 motor control pins across 2 L298N drivers
-- All motors powered by 14.8V battery pack
-- **Note:** GPIO18 and GPIO25 shared between drivers for ENB functionality
+- **Rear Driver (Back ESP32):** GPIO13,14,18,19,23,27 (2 motors)
+- **Front Driver 1 (Front ESP32):** GPIO13,23,22,25,26,27 (2 motors)
+- **Front Driver 2 (Front ESP32):** GPIO14,32,33,18,19,21 (2 motors)
+- Total: 18 motor control pins across 3 L298N drivers (board-local, no conflicts)
 
 ### 2.3 ESP32-CAM AI-THINKER (Vision Module)
 
@@ -311,11 +338,12 @@ graph LR
     end
 
     subgraph "Power Management"
+        BMS[4S BMS PCB<br/>Cell Protection]
         RS[Rocker Switch<br/>Main On/Off]
-        FUSE[10A Fuse<br/>Overcurrent Protection]
+        FUSE[10A Main Fuse]
         BC[LM2596 Buck Converter<br/>14.8V → 5V @ 3A]
         BC --> 5V_DIST[5V Distribution]
-        B4 --> RS --> FUSE --> BC
+        B4 --> BMS --> RS --> FUSE --> BC
     end
 
     subgraph "14.8V Distribution"
@@ -424,12 +452,12 @@ graph TB
 
 ### 4.2 UART Pin Assignments
 
-| Connection        | Back ESP32     | Front ESP32  | ESP32-CAM   | Purpose         |
-| ----------------- | -------------- | ------------ | ----------- | --------------- |
-| **Master-Slave**  | GPIO 22 (TX) → | GPIO 22 (RX) | -           | Motor Commands  |
-|                   | GPIO 21 (RX) ← | GPIO 23 (TX) | -           | Status Updates  |
-| **Master-Vision** | GPIO 1 (TX) →  | -            | GPIO 3 (RX) | Vision Commands |
-|                   | GPIO 3 (RX) ←  | -            | GPIO 1 (TX) | ML Results      |
+| Connection        | Back ESP32      | Front ESP32   | ESP32-CAM   | Purpose         |
+| ----------------- | --------------- | ------------- | ----------- | --------------- |
+| **Master-Slave**  | GPIO 17 (TX2) → | GPIO 16 (RX2) | -           | Motor Commands  |
+|                   | GPIO 16 (RX2) ← | GPIO 17 (TX2) | -           | Status Updates  |
+| **Master-Vision** | GPIO 1 (TX) →   | -             | GPIO 3 (RX) | Vision Commands |
+|                   | GPIO 3 (RX) ←   | -             | GPIO 1 (TX) | ML Results      |
 
 ### 4.3 WiFi Network Configuration
 
@@ -608,7 +636,7 @@ graph TB
 
 | Application               | Wire Gauge | Current Capacity | Length Limit | Color Code                               |
 | ------------------------- | ---------- | ---------------- | ------------ | ---------------------------------------- |
-| **Battery to LM2596**     | 16 AWG     | 10A              | <1m          | Red (+) / Black (-)                      |
+| **Battery to LM2596**     | 14 AWG     | 13A              | <0.5m        | Red (+) / Black (-) - Short, thick       |
 | **5V Distribution**       | 18 AWG     | 3A               | <2m          | Red (5V) / Black (GND)                   |
 | **Motor Control Signals** | 20 AWG     | 1A               | <1m          | Orange (PWM) / Yellow (IN1) / Blue (IN2) |
 | **UART Communication**    | 22 AWG     | 0.1A             | <3m          | Yellow (TX) / White (RX)                 |
@@ -806,22 +834,19 @@ graph TB
 
 #### Step 3: Control Signal Connections
 
-1. **Back ESP32 to L298N #1**
+1. **Back ESP32 to L298N #1 (Rear motors controlled by Rear ESP32)**
 
-   - GPIO 13 → ENA
-   - GPIO 23 → IN1
-   - GPIO 22 → IN2
-   - GPIO 25 → ENB
-   - GPIO 26 → IN3
-   - GPIO 27 → IN4
+   - GPIO 13 → Motor Control 1 (PWM/ENA)
+   - GPIO 14 → Motor Control 2 (IN1)
+   - GPIO 18 → Motor Control 3 (IN2)
+   - GPIO 19 → Motor Control 4 (IN3)
+   - GPIO 23 → Motor Control 5 (IN4)
+   - GPIO 27 → Motor Control 6 (PWM/ENB)
 
-2. **Front ESP32 to L298N #2**
-   - GPIO 13 → ENA
-   - GPIO 23 → IN1
-   - GPIO 22 → IN2
-   - GPIO 25 → ENB
-   - GPIO 26 → IN3
-   - GPIO 27 → IN4
+2. **Front ESP32 to L298N #2 (Front motors controlled by Front ESP32)**
+   - See Front ESP32 pin configuration table for assignments
+   - Driver 1: GPIO 13,23,22,25,26,27
+   - Driver 2: GPIO 14,32,33,18,19,21 (all safe per pin.md)
 
 ### 7.4 Phase 4: Sensor Installation (30 minutes)
 
@@ -833,16 +858,11 @@ graph TB
    - Face forward, clear of obstructions
    - Connect VCC to 5V
    - Connect GND to common ground
-   - Connect Trig to GPIO 14 (Back ESP32)
-   - Connect Echo to GPIO 18 (Back ESP32)
+   - Connect Trig to GPIO 4 (Back ESP32)
+   - Connect Echo to GPIO 36 (Back ESP32) **⚠️ WITH 5V→3.3V VOLTAGE DIVIDER!**
+   - Use 1kΩ + 2kΩ resistor divider on Echo line
 
-2. **Rear Ultrasonic (HC-SR04)**
-   - Mount at rear of robot, 10cm above ground
-   - Face backward, clear of obstructions
-   - Connect VCC to 5V
-   - Connect GND to common ground
-   - Connect Trig to GPIO 19 (Back ESP32)
-   - Connect Echo to GPIO 21 (Back ESP32)
+2. **Rear Ultrasonic (HC-SR04) - If using second sensor - If using second sensor**
 
 #### Step 2: Gas Sensor
 
@@ -860,7 +880,7 @@ graph TB
 1. **Active Buzzer**
    - Mount in audible location
    - Protected from weather
-   - Connect positive to GPIO 4 (Back ESP32)
+   - Connect positive to GPIO 33 (Back ESP32) via transistor driver recommended
    - Connect negative to common ground
    - Test buzzer operation
 
@@ -868,18 +888,15 @@ graph TB
 
 #### Step 1: UART Connections
 
-1. **Back ESP32 to Front ESP32**
+1. **Back ESP32 to Front ESP32 (Serial2 - Hardware UART)**
 
-   - GPIO 16 (TX) → GPIO 17 (RX)
-   - GPIO 17 (RX) → GPIO 16 (TX)
+   - Rear GPIO 17 (TX2) → Front GPIO 16 (RX2)
+   - Rear GPIO 16 (RX2) ← Front GPIO 17 (TX2)
    - Connect common ground between boards
-   - Use twisted pair or shielded wire
+   - Use twisted pair or shielded wire for long runs
+   - ⚠️ **Serial2 uses fixed GPIO16/17 - these cannot be changed**
 
-2. **Back ESP32 to ESP32-CAM**
-   - GPIO 14 (TX) → GPIO 15 (RX)
-   - GPIO 12 (RX) → GPIO 14 (TX)
-   - Connect common ground
-   - Consider twisted pair for noise reduction
+2. **Back ESP32 to ESP32-CAM - Optional (conflicts with camera)**
 
 #### Step 2: LED Indicators
 
@@ -2088,6 +2105,303 @@ If pin assignments need to be changed urgently:
 
 ---
 
+## 12. Pre-Power-Up Safety Checklist
+
+### 12.1 CRITICAL: Power-Off Verification (Complete Before ANY Power-On)
+
+**\u26a0\ufe0f DO NOT SKIP THESE CHECKS - FAILURE TO VERIFY MAY DESTROY EQUIPMENT**
+
+#### Check 1: ESP32 VIN Voltage Verification
+
+- [ ] **Verify all ESP32 VIN pins receive ONLY 5V from LM2596 (NEVER 14.8V)**
+  - [ ] Rear ESP32 VIN \u2192 5V rail (measure with multimeter)
+  - [ ] Front ESP32 VIN \u2192 5V rail (measure with multimeter)
+  - [ ] ESP32-CAM VIN \u2192 5V rail (measure with multimeter)
+  - [ ] **Expected:** 4.9-5.1V at each VIN pin with LM2596 powered
+  - [ ] **FAIL condition:** Any VIN >5.5V or connected to 14.8V rail
+
+#### Check 2: LM2596 Output Configuration
+
+- [ ] Set LM2596 input to 14.8V (battery disconnected)
+- [ ] Adjust potentiometer while measuring output with multimeter
+- [ ] Set output to exactly 5.00V \u00b10.05V
+- [ ] Test under 1A load (resistor or test load), verify voltage stays 4.9-5.1V
+- [ ] **FAIL condition:** Voltage >5.5V or <4.5V under load
+
+#### Check 3: HC-SR04 Echo Voltage Divider
+
+- [ ] Verify 1k\u03a9 resistor installed from HC-SR04 Echo \u2192 GPIO36
+- [ ] Verify 2k\u03a9 resistor installed from GPIO36 \u2192 GND
+- [ ] Power HC-SR04 with 5V, trigger a pulse
+- [ ] Measure voltage at GPIO36 during Echo HIGH state
+- [ ] **Expected:** 3.0-3.4V at GPIO36
+- [ ] **FAIL condition:** Voltage at GPIO36 >3.6V (will damage ESP32)
+
+#### Check 4: GPIO Pin Conflict Resolution
+
+**Rear ESP32 (verify no conflicts):**
+
+- [ ] GPIO22 used ONLY for UART TX (not shared)
+- [ ] GPIO21 used ONLY for UART RX (not shared)
+- [ ] GPIO4 used ONLY for HC-SR04 Trig (not shared)
+- [ ] GPIO36 used ONLY for HC-SR04 Echo (not shared)
+- [ ] GPIO32,33 used ONLY for MQ-2 sensor (not shared)
+- [ ] Motor control pins 13,14,18,19,23,27 not shared with other functions
+
+**Front ESP32 (verify no conflicts):**
+
+- [ ] GPIO22 used ONLY for UART RX (not shared)
+- [ ] GPIO32 used ONLY for UART TX (not shared)
+- [ ] No GPIO used for multiple functions
+- [ ] All motor control pins unique (13,14,18,19,21,23,25,26,27,33,5)
+
+#### Check 5: Wiring Continuity and Shorts
+
+- [ ] **Measure resistance between 14.8V and GND:** Must be >100\u03a9 (no short)
+- [ ] **Measure resistance between 5V and GND:** Must be >50\u03a9 (no short)
+- [ ] Verify UART crossover: Rear TX \u2192 Front RX, Rear RX \u2190 Front TX
+- [ ] Verify all grounds connected to common star ground point
+- [ ] Check for accidental solder bridges on all boards
+
+#### Check 6: Fusing and Current Protection
+
+- [ ] 10A main fuse installed in battery positive line
+- [ ] Optional: 3-5A fuses per motor pair installed
+- [ ] Optional: 500mA fuses for each ESP32 board
+- [ ] BMS (if installed) connected and functional
+- [ ] Emergency power disconnect (rocker switch) accessible and functional
+
+---
+
+### 12.2 Power-On Test Sequence (Follow in Order)
+
+**\u26a0\ufe0f STOP at ANY failure and troubleshoot before proceeding**
+
+#### Stage 1: 5V Rail Test (Motors Disconnected)
+
+1. **Disconnect all motors from L298N drivers**
+2. Power on main battery switch
+3. **Measure voltages immediately:**
+   - [ ] Battery voltage: 12.0-16.8V
+   - [ ] LM2596 output: 4.9-5.1V
+   - [ ] Each ESP32 VIN: 4.9-5.1V
+   - [ ] Each ESP32 3.3V pin: 3.2-3.4V
+4. **Monitor for 30 seconds:**
+   - [ ] No smoke, burning smell, or excessive heat
+   - [ ] Voltages remain stable
+   - [ ] Current draw <500mA at 5V rail
+5. **PASS:** Proceed to Stage 2 | **FAIL:** Power off, troubleshoot
+
+#### Stage 2: ESP32 Boot Test
+
+1. **With 5V rail verified stable, observe ESP32 boards:**
+   - [ ] Rear ESP32: Power LED on, Serial output visible (115200 baud)
+   - [ ] Front ESP32: Power LED on, Serial output visible
+   - [ ] ESP32-CAM: Status LED blinks or shows activity
+2. **Check serial monitor output for each board:**
+   - [ ] No boot errors or exceptions
+   - [ ] WiFi AP "ProjectNightfall" visible (from Rear ESP32)
+   - [ ] No continuous reset loops
+3. **PASS:** Proceed to Stage 3 | **FAIL:** Check serial errors, verify pin connections
+
+#### Stage 3: UART Communication Test
+
+1. **Run UART loopback test (see Section 11.4):**
+   - [ ] Rear ESP32 sends test message to Front ESP32
+   - [ ] Front ESP32 receives message and responds
+   - [ ] Verify message integrity (no corruption)
+2. **Monitor for communication errors:**
+   - [ ] No timeout errors
+   - [ ] Heartbeat messages received every 5 seconds
+3. **PASS:** Proceed to Stage 4 | **FAIL:** Check TX/RX crossover, ground connection
+
+#### Stage 4: Sensor Validation
+
+1. **HC-SR04 Ultrasonic:**
+   - [ ] Measure voltage at GPIO36 with multimeter (must be \u22643.3V)
+   - [ ] Trigger distance measurement, verify readings change with obstacles
+   - [ ] **Expected:** 2-400cm range, \u00b12cm accuracy
+2. **MQ-2 Gas Sensor:**
+   - [ ] Read analog value on GPIO32 (should be stable 200-400 range in clean air)
+   - [ ] Note: Requires 24-48 hour pre-heat for calibration
+3. **PASS:** Proceed to Stage 5 | **FAIL:** Check sensor power, wiring, voltage divider
+
+#### Stage 5: Single Motor Bench Test
+
+1. **Connect ONE motor to L298N Driver 1**
+2. **Send low-speed command (PWM=100, 40% speed):**
+   - [ ] Motor spins in expected direction
+   - [ ] No excessive current draw (measure at motor driver input)
+   - [ ] L298N driver does not overheat (touch test)
+3. **Test reverse direction:**
+   - [ ] Motor reverses when commanded
+4. **Repeat for each motor individually**
+5. **Monitor L298N temperature:** Should stay <60\u00b0C with single motor
+6. **PASS:** Proceed to Stage 6 | **FAIL:** Check motor wiring, driver connections, control signals
+
+#### Stage 6: Full Motor Integration Test
+
+1. **Connect all motors to L298N drivers**
+2. **Send simultaneous low-speed command to all motors (PWM=80):**
+   - [ ] All motors spin
+   - [ ] Measure total current draw from battery (should be <5A at low speed)
+   - [ ] Monitor LM2596 and L298N temperatures (should stay <70\u00b0C)
+3. **Test emergency stop:**
+   - [ ] Send stop command, all motors halt within 100ms
+4. **PASS:** System ready for testing | **FAIL:** Check for overheating, current overload
+
+---
+
+### 12.3 Safety Enhancements and Recommendations
+
+#### Critical Safety Additions (Highly Recommended)
+
+1. **Battery Management System (BMS)**
+
+   - **Purpose:** Prevents overcharge (>4.2V/cell), overdischarge (<2.5V/cell), cell balancing
+   - **Specification:** 4S 14.8V BMS rated for 10-20A continuous
+   - **Cost:** $5-10
+   - **Installation:** Between battery pack and rocker switch
+   - **\u26a0\ufe0f Without BMS:** Risk of battery fire, reduced lifespan, damage from over-discharge
+
+2. **Per-Motor Fusing**
+
+   - **Purpose:** Isolate motor failures, prevent cascading damage
+   - **Specification:** 3-5A fast-blow fuse per motor or motor pair
+   - **Installation:** In series with each motor positive lead
+   - **Benefit:** Single motor stall won't blow main fuse
+
+3. **Current Sensing**
+   - **Purpose:** Early stall detection, power monitoring, emergency cutoff
+   - **Recommended sensors:** ACS712 (5-30A modules) or INA219 (I\u00b2C, high precision)
+   - **Installation:** In series with main motor feed (high-side or low-side)
+   - **Software integration:** Read current, trigger emergency stop if >10A for >500ms
+
+#### Power System Improvements
+
+1. **Bulk Capacitors**
+
+   - **Location:** LM2596 output (1000\u00b5F 16V electrolytic)
+   - **Location:** Each motor driver VIN (470\u00b5F 25V electrolytic)
+   - **Location:** Each ESP32 VIN (100\u00b5F + 0.1\u00b5F ceramic)
+   - **Purpose:** Smooth voltage transients, reduce EMI, improve stability
+
+2. **Motor Driver Upgrade Options**
+
+   - **Problem with L298N:** 40% power loss (2-3V voltage drop), poor efficiency, overheating
+   - **Better alternatives:**
+     - **VNH5019:** 30A continuous, low voltage drop, current sensing, thermal protection ($8-15)
+     - **BTS7960 (IBT-2):** 43A peak, half-bridge x2, very high current ($6-12)
+     - **Dual TB6612FNG:** 3.2A continuous per channel, efficient for smaller motors ($5-8)
+   - **Recommendation:** If motors draw >2A continuous, replace L298N with VNH5019 or BTS7960
+
+3. **Wire Gauge Upgrades**
+   - **Battery to BMS to switch:** 12 AWG (20A capable) for high-current peaks
+   - **Motor power leads (14.8V):** 14 AWG minimum, 12 AWG preferred
+   - **Reason:** 16 AWG is marginal at 10A continuous and will heat up on long runs
+
+#### Thermal Management
+
+1. **L298N Heat Sinks**
+
+   - **Requirement:** Mandatory if motors draw >1A continuous
+   - **Specification:** Aluminum heat sink, 20x20mm minimum, thermal compound
+   - **Optional:** Small 5V cooling fan if temperature exceeds 60\u00b0C
+
+2. **Forced Air Cooling**
+   - **Trigger:** If L298N or LM2596 temperature >70\u00b0C during normal operation
+   - **Implementation:** 40mm 5V fan positioned to blow air over drivers and regulator
+   - **Control:** Thermistor + automatic fan control circuit recommended
+
+#### Electrical Isolation and Grounding
+
+1. **Star Ground Implementation**
+
+   - **Central point:** Battery negative terminal
+   - **Ground wires:**
+     - Battery GND: 14 AWG black
+     - LM2596 GND: 14 AWG black
+     - Each ESP32 GND: 20 AWG black
+     - Each motor driver GND: 16 AWG black
+     - Sensor GNDs: 22 AWG black
+   - **\u26a0\ufe0f Critical:** All grounds must connect to single star point (avoid ground loops)
+
+2. **Signal Cable Management**
+
+   - **Twisted pairs:** Use for all UART TX/RX pairs (reduces EMI)
+   - **Shielded cable:** Optional for long UART runs >1m
+   - **Routing:** Keep signal cables away from motor power cables (separate by >5cm)
+
+3. **Cable Strain Relief**
+   - **Purpose:** Prevent wire breakage at solder joints and terminals
+   - **Method:** Secure cables 2-3cm from connection points with cable ties or clamps
+   - **High-stress areas:** Motor connections, battery leads, any moving parts
+
+---
+
+### 12.4 Emergency Response Procedures
+
+#### Smoke or Burning Smell
+
+1. **Immediately disconnect battery (pull main power switch)**
+2. Do NOT touch any components (may be hot >100\u00b0C)
+3. Identify smoking component (visual inspection from safe distance)
+4. Common causes:
+   - Short circuit \u2192 Check for solder bridges, pinched wires
+   - Overvoltage on ESP32 \u2192 Verify VIN voltage, check for 14.8V on VIN
+   - Motor stall \u2192 Check for mechanical binding, overload
+5. **Do NOT re-power until fault is identified and corrected**
+
+#### Continuous Reset Loop (ESP32 Bootloop)
+
+1. Check serial monitor for boot error messages
+2. Common causes:
+   - Brownout (insufficient power) \u2192 Check 5V rail voltage under load
+   - GPIO0/2/15 boot strap conflict \u2192 Verify these pins not pulled LOW/HIGH during boot
+   - Corrupted flash \u2192 Re-flash firmware
+3. Disconnect all peripherals and test bare ESP32 boot
+
+#### No WiFi Access Point
+
+1. Verify Rear ESP32 is powered and booted (check serial output)
+2. Check WiFi initialization code (SSID: "ProjectNightfall", password: "rescue2025")
+3. Verify no other device using same SSID on channel 1
+4. Restart Rear ESP32 (press reset button)
+
+#### Motor Runs But Wrong Direction
+
+1. **Do NOT modify code first**
+2. Swap motor wires at motor driver output (reverse polarity)
+3. Test again
+4. If multiple motors reversed, check motor driver IN1/IN2 logic in code
+
+---
+
+### 12.5 Long-Term Maintenance and Monitoring
+
+#### Weekly Checks
+
+- [ ] Battery voltage (should be >12.5V after charge)
+- [ ] Physical inspection for loose wires, damaged insulation
+- [ ] Motor operation (no unusual noise, vibration)
+- [ ] Sensor accuracy (test HC-SR04 with known distances)
+
+#### Monthly Checks
+
+- [ ] Clean dust/debris from motors, sensors, electronics
+- [ ] Check all screw terminals for tightness
+- [ ] Verify fuse integrity (visual inspection)
+- [ ] Test emergency stop function
+
+#### Quarterly Checks
+
+- [ ] Battery capacity test (measure runtime under known load)
+- [ ] Re-calibrate MQ-2 gas sensor (24-hour pre-heat cycle)
+- [ ] Inspect and replace worn wires or connectors
+- [ ] Update firmware if bugs or improvements available
+
+---
+
 **Document Control:**
 
 - **Version:** 2.0.0
@@ -2095,5 +2409,8 @@ If pin assignments need to be changed urgently:
 - **Next Review:** March 30, 2026
 - **Approval:** Hardware Engineering Team
 
-**© 2025 Project Nightfall Team**  
+**\u26a0\ufe0f CRITICAL SAFETY REVIEW COMPLETED: December 30, 2025**
+**All critical voltage, pin conflict, and safety issues addressed in Version 2.0.0**
+
+**\u00a9 2025 Project Nightfall Team**  
 **Licensed under Creative Commons Attribution 4.0**
