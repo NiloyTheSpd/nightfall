@@ -25,7 +25,7 @@ All pin connections have been verified against:
 
 - **Board:** ESP32 DevKit V1 (30-pin)
 - **Role:** Master/Brain, sensor fusion, WiFi AP, motor command orchestration
-- **Power:** VIN (14.8V from battery), GND
+- **Power:** VIN (5V from LM2596), GND
 - **Safe GPIOs Used:** 13, 14, 18, 19, 21-23, 25, 26, 27, 32, 33, 36
 
 ### Motor Control (L298N Driver)
@@ -43,27 +43,42 @@ All pin connections have been verified against:
 
 **Wiring Instructions:**
 
-1. Connect motor supply (14.8V) to L298N VIN pins
-2. Connect ESP32 GPIO pins to L298N input pins (3.3V logic safe)
-3. Connect L298N motor outputs to DC motors
-4. Connect L298N GND to system ground
+1. **🚨 CRITICAL:** Remove 5V regulator jumper on L298N module before wiring
+2. Connect motor supply (11.1V) to L298N VIN pins
+3. Connect ESP32 GPIO pins to L298N input pins (3.3V logic safe)
+4. Connect L298N 5V pin to external 5V rail (from LM2596)
+5. Connect L298N motor outputs to DC motors
+6. Connect L298N GND to system ground
+
+**⚠️ JUMPER WARNING:**
+
+- **With jumper ON:** L298N generates 5V internally (causes conflicts!)
+- **With jumper OFF:** L298N accepts external 5V (required configuration)
+- **Action:** Remove ALL jumpers from L298N 5V pins
 
 ### Gas Sensor (MQ-2)
 
 ✅ **Verified with proper connections**
 
-| GPIO | Label           | Sensor Pin | Voltage    | Notes                       |
-| ---- | --------------- | ---------- | ---------- | --------------------------- |
-| 32   | PIN_GAS_ANALOG  | A0         | 0-3.3V ADC | Analog gas reading          |
-| 33   | PIN_GAS_DIGITAL | D0         | 0-3.3V     | Digital threshold detection |
+| GPIO | Label           | Sensor Pin | Voltage              | Notes                       |
+| ---- | --------------- | ---------- | -------------------- | --------------------------- |
+| 32   | PIN_GAS_ANALOG  | A0         | 0-5V (⚠️ test first) | Analog gas reading          |
+| 33   | PIN_GAS_DIGITAL | D0         | 0-3.3V               | Digital threshold detection |
 
 **Wiring Instructions:**
 
-1. Connect MQ-2 VCC to 3.3V (from buck converter)
+1. Connect MQ-2 VCC to 5V (from buck converter)
 2. Connect MQ-2 GND to system ground
-3. Connect MQ-2 A0 to GPIO32 (ADC input)
-4. Connect MQ-2 D0 to GPIO33 (digital input)
-5. **Critical:** MQ-2 requires 24-48 hours pre-heat for reliable readings
+3. **⚠️ TEST ANALOG OUTPUT:** Expose to gas (lighter) and measure A0 voltage
+4. If A0 > 3.3V: Add voltage divider or use only digital output (D0)
+5. Connect MQ-2 A0 to GPIO32 (if <3.3V) or D0 to GPIO33
+6. **Critical:** MQ-2 requires 24-48 hours pre-heat for reliable readings
+
+**🚨 VOLTAGE SAFETY:**
+
+- MQ-2 powered by 5V can output up to 5V on A0 pin
+- ESP32 GPIO32 max input: 3.3V
+- **Solution:** Test first, add divider if needed, or use digital output only
 
 ### Ultrasonic Sensor (HC-SR04)
 
@@ -248,14 +263,15 @@ All pin connections have been verified against:
 
 ### Battery Configuration
 
-✅ **4x 18650 Li-ion in series**
+✅ **11.1V LiPo Battery (3S Configuration)**
 
-| Specification | Value         | Notes                  |
-| ------------- | ------------- | ---------------------- |
-| Voltage       | 14.8V nominal | Safe range: 12V-16.8V  |
-| Capacity      | 2500mAh       | 37Wh total energy      |
-| Runtime       | 2-3 hours     | Normal operation       |
-| Protection    | 10A fuse      | Overcurrent protection |
+| Specification | Value         | Notes                   |
+| ------------- | ------------- | ----------------------- |
+| Voltage       | 11.1V nominal | Safe range: 9V-12.6V    |
+| Capacity      | 2200mAh       | 25C discharge rating    |
+| Runtime       | 2-3 hours     | Normal operation        |
+| Protection    | 10A fuse      | Overcurrent protection  |
+| **⚠️ Safety** | NO BMS        | External alarm required |
 
 ### LM2596 Buck Converter
 
@@ -320,17 +336,60 @@ All pin connections have been verified against:
 
 ---
 
-## Part 6: Critical Safety Checklist
+## Part 6: 🚨 CRITICAL: L298N Jumper Configuration (MUST READ FIRST)
+
+### ⚠️ **POWER SOURCE CONFLICT PREVENTION**
+
+**The Problem:**
+Most L298N modules have a small black jumper that controls the internal 5V regulator:
+
+- **Jumper ON:** Module generates 5V internally from motor supply (12V)
+- **Jumper OFF:** Module accepts external 5V supply
+
+**The Risk:**
+If you connect our external 5V from LM2596 while the jumper is ON:
+
+- Two power sources will "fight" each other
+- Either the L298N regulator or buck converter will overheat and fail
+- Component damage, fire risk, or system failure
+
+**The Solution (MANDATORY):**
+
+1. **Remove ALL jumpers** from the three L298N modules
+2. **Location:** Usually behind the screw terminals
+3. **Visual:** Small black plastic blocks covering two pins
+4. **Action:** Pull off completely (don't just move aside)
+
+**Result:** The 5V terminal becomes an INPUT (safe for our external 5V)
+
+### Verification Steps
+
+- [ ] **Module 1:** No jumper on 5V pins
+- [ ] **Module 2:** No jumper on 5V pins
+- [ ] **Module 3:** No jumper on 5V pins
+- [ ] **Measure 5V terminal:** Should be ~5V when external 5V connected
+- [ ] **Test with meter:** No internal voltage generation
+
+**🚨 FAILURE TO REMOVE JUMPERS WILL DESTROY COMPONENTS!**
+
+---
+
+## Part 7: Critical Safety Checklist
 
 ### Before Powering On
 
+- [ ] **🚨 L298N JUMPERS REMOVED:** All three modules have 5V regulator jumpers removed
 - [ ] HC-SR04 voltage divider built and tested (measure GPIO36 = 3.33V)
-- [ ] No 5V signals directly on ESP32 GPIO pins except through divider
-- [ ] All motor power connections on 14.8V line
-- [ ] ESP32 logic connections on 3.3V from VIN pin
+- [ ] **MQ-2 Analog Test:** A0 voltage measured <3.3V or voltage divider added
+- [ ] **Capacitor Filtering:** 100µF-470µF capacitors installed near ESP32 VIN pins
+- [ ] No 5V signals directly on ESP32 GPIO pins except through dividers
+- [ ] All motor power connections on 11.1V line
+- [ ] ESP32 logic connections on 5V from VIN pin (never 11.1V!)
+- [ ] L298N logic pins connected to external 5V rail
 - [ ] Fuse installed in series with battery positive
 - [ ] Buck converter output set to 5.0V (verified with multimeter)
 - [ ] All GND wires properly connected to common junction
+- [ ] LiPo voltage alarm connected to battery balance port
 
 ### During Assembly
 
@@ -530,6 +589,9 @@ GPIO 33 → Status LED (LOW=ON)
 ✅ **All pin connections verified**  
 ✅ **No conflicts detected**  
 ✅ **Voltage levels verified safe**  
+🚨 **L298N jumper removal is CRITICAL**  
+🚨 **MQ-2 analog output testing required**  
+🚨 **Capacitor filtering for brownout prevention**  
 ⚠️ **HC-SR04 voltage divider is CRITICAL**  
 ✅ **Power distribution calculated**  
 ✅ **Component compatibility confirmed**
@@ -538,13 +600,15 @@ GPIO 33 → Status LED (LOW=ON)
 
 **Next Steps:**
 
-1. Gather all components and verify inventory
-2. Build the HC-SR04 voltage divider circuit
-3. Set up buck converter to 5.0V output
-4. Assemble ESP32 connections following color-coded wires
-5. Connect sensor modules
-6. Install motor drivers and motor connections
-7. Perform continuity and voltage tests before power-up
+1. **🚨 CRITICAL:** Remove all L298N 5V regulator jumpers BEFORE wiring
+2. Install 100µF-470µF capacitors near ESP32 VIN pins
+3. Test MQ-2 analog output voltage before GPIO32 connection
+4. Build the HC-SR04 voltage divider circuit
+5. Set up buck converter to 5.0V output
+6. Assemble ESP32 connections following color-coded wires
+7. Connect sensor modules
+8. Install motor drivers and motor connections
+9. Verify all safety checks in checklist before power-up
 
 ---
 
