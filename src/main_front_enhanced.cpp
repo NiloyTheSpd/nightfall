@@ -45,22 +45,22 @@ int targetFrontRightSpeed = 0;
 int targetCenterLeftSpeed = 0;
 int targetCenterRightSpeed = 0;
 
-// Motor driver pin assignments from config.h
-// Motor Driver 1 (Front Left/Right) - using config.h definitions
-#define MOTOR1_LEFT_PWM PIN_MOTOR_1    // GPIO13 - PWM speed control
-#define MOTOR1_LEFT_IN1 PIN_MOTOR_2    // GPIO14 - Direction control
-#define MOTOR1_LEFT_IN2 PIN_MOTOR_3    // GPIO18 - Direction control
-#define MOTOR1_RIGHT_PWM PIN_MOTOR_4   // GPIO19 - Direction control
-#define MOTOR1_RIGHT_IN1 PIN_MOTOR_5   // GPIO23 - PWM speed control
-#define MOTOR1_RIGHT_IN2 PIN_MOTOR_6   // GPIO27 - Direction control
+// Motor driver pin assignments - HARDCODED to match wiring guide
+// Motor Driver 1 (Front Left/Right) - GPIO 13,23,22,25,26,27
+#define MOTOR1_LEFT_PWM 13  // GPIO13 - PWM speed control
+#define MOTOR1_LEFT_IN1 23  // GPIO23 - Direction control
+#define MOTOR1_LEFT_IN2 22  // GPIO22 - Direction control
+#define MOTOR1_RIGHT_PWM 25 // GPIO25 - PWM speed control
+#define MOTOR1_RIGHT_IN1 26 // GPIO26 - Direction control
+#define MOTOR1_RIGHT_IN2 27 // GPIO27 - Direction control
 
-// Motor Driver 2 (Center Left/Right) - using config.h definitions
-#define MOTOR2_LEFT_PWM PIN_MOTOR_5    // GPIO21 - PWM speed control
-#define MOTOR2_LEFT_IN1 PIN_MOTOR_6    // GPIO23 - Direction control
-#define MOTOR2_LEFT_IN2 PIN_MOTOR_7    // GPIO25 - Direction control
-#define MOTOR2_RIGHT_PWM PIN_MOTOR_8   // GPIO26 - Direction control
-#define MOTOR2_RIGHT_IN1 PIN_MOTOR_9   // GPIO27 - Direction control
-#define MOTOR2_RIGHT_IN2 PIN_MOTOR_1   // GPIO13 - Reusing for additional control
+// Motor Driver 2 (Center Left/Right) - GPIO 14,32,33,18,19,21
+#define MOTOR2_LEFT_PWM 14  // GPIO14 - PWM speed control
+#define MOTOR2_LEFT_IN1 32  // GPIO32 - Direction control
+#define MOTOR2_LEFT_IN2 33  // GPIO33 - Direction control
+#define MOTOR2_RIGHT_PWM 18 // GPIO18 - PWM speed control
+#define MOTOR2_RIGHT_IN1 19 // GPIO19 - Direction control
+#define MOTOR2_RIGHT_IN2 21 // GPIO21 - Direction control
 
 // Function declarations
 void setup();
@@ -121,35 +121,34 @@ void loop()
 
 void initializeHardware()
 {
-    DEBUG_PRINTLN("Initializing nine-motor control hardware...");
+    DEBUG_PRINTLN("Initializing four-motor control hardware...");
 
-    // Initialize Motor Driver 1 pins (Front motors) - GPIO13,14,18,19,23,25
+    // Initialize Motor Driver 1 pins (Front motors) - GPIO13,23,22,25,26,27
     pinMode(MOTOR1_LEFT_PWM, OUTPUT);  // GPIO13
-    pinMode(MOTOR1_LEFT_IN1, OUTPUT);  // GPIO14
-    pinMode(MOTOR1_LEFT_IN2, OUTPUT);  // GPIO18
-    pinMode(MOTOR1_RIGHT_PWM, OUTPUT); // GPIO19
-    pinMode(MOTOR1_RIGHT_IN1, OUTPUT); // GPIO23
-    pinMode(MOTOR1_RIGHT_IN2, OUTPUT); // GPIO25
+    pinMode(MOTOR1_LEFT_IN1, OUTPUT);  // GPIO23
+    pinMode(MOTOR1_LEFT_IN2, OUTPUT);  // GPIO22
+    pinMode(MOTOR1_RIGHT_PWM, OUTPUT); // GPIO25
+    pinMode(MOTOR1_RIGHT_IN1, OUTPUT); // GPIO26
+    pinMode(MOTOR1_RIGHT_IN2, OUTPUT); // GPIO27
 
-    // Initialize Motor Driver 2 pins (Center motors) - GPIO21,23,25,26,27
-    pinMode(MOTOR2_LEFT_PWM, OUTPUT);  // GPIO21
-    pinMode(MOTOR2_LEFT_IN1, OUTPUT);  // GPIO23
-    pinMode(MOTOR2_LEFT_IN2, OUTPUT);  // GPIO25
-    pinMode(MOTOR2_RIGHT_PWM, OUTPUT); // GPIO26
-    pinMode(MOTOR2_RIGHT_IN1, OUTPUT); // GPIO27
-    pinMode(MOTOR2_RIGHT_IN2, OUTPUT); // GPIO13 (reused)
+    // Initialize Motor Driver 2 pins (Center motors) - GPIO14,32,33,18,19,21
+    pinMode(MOTOR2_LEFT_PWM, OUTPUT);  // GPIO14
+    pinMode(MOTOR2_LEFT_IN1, OUTPUT);  // GPIO32
+    pinMode(MOTOR2_LEFT_IN2, OUTPUT);  // GPIO33
+    pinMode(MOTOR2_RIGHT_PWM, OUTPUT); // GPIO18
+    pinMode(MOTOR2_RIGHT_IN1, OUTPUT); // GPIO19
+    pinMode(MOTOR2_RIGHT_IN2, OUTPUT); // GPIO21
 
-    // Initialize UART Slave pins - Wiring: RX22<-TX22(Rear), TX23->RX21(Rear)
-    pinMode(PIN_UART_RX, INPUT);  // GPIO22 - UART RX from Rear ESP32 Master
-    pinMode(PIN_UART_TX, OUTPUT); // GPIO23 - UART TX to Rear ESP32 Master
+    // Initialize UART Slave pins - Wiring: RX16<-TX17(Rear), TX17->RX16(Rear)
+    // Note: Serial2 hardware uses GPIO16(RX2), GPIO17(TX2) - no pinMode needed
 
     // Stop all motors initially
     stopAllMotors();
 
-    DEBUG_PRINTLN("Nine-motor control hardware initialized");
-    DEBUG_PRINTLN("Motor Driver 1: GPIO13,14,18,19,23,25 (Front Motors)");
-    DEBUG_PRINTLN("Motor Driver 2: GPIO21,23,25,26,27 (Center Motors)");
-    DEBUG_PRINTLN("UART: GPIO22 (RX), GPIO23 (TX) to Rear ESP32");
+    DEBUG_PRINTLN("Four-motor control hardware initialized");
+    DEBUG_PRINTLN("Motor Driver 1: GPIO13,23,22,25,26,27 (Front Motors)");
+    DEBUG_PRINTLN("Motor Driver 2: GPIO14,32,33,18,19,21 (Center Motors)");
+    DEBUG_PRINTLN("UART: GPIO16 (RX2), GPIO17 (TX2) via Serial2 to Rear ESP32");
 }
 
 void handleMainLoop()
