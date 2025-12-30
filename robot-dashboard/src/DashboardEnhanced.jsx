@@ -33,8 +33,20 @@ import {
   Eye,
   Zap,
   Clock,
-  Signal
+  Signal,
+  Settings,
+  Maximize2,
+  BarChart3,
+  Info
 } from 'lucide-react';
+
+// Import new components
+import { DashboardLoader } from './components/LoadingSkeleton';
+import TelemetryChart, { useTelemetryHistory } from './components/TelemetryChart';
+import SettingsPanel from './components/SettingsPanel';
+import FullscreenVideo from './components/FullscreenVideo';
+import DataExportPanel from './components/DataExportPanel';
+import Tooltip from './components/Tooltip';
 
 // Enhanced Mission Control Dashboard for Project Nightfall Rescue Robot
 // Features: Real WebSocket client, Three-zone layout, Performance monitoring, Error handling
@@ -80,6 +92,35 @@ const SystemStatus = {
  */
 
 export default function DashboardEnhanced() {
+  // --- State for new features ---
+  const [isLoading, setIsLoading] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showFullscreenVideo, setShowFullscreenVideo] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [settings, setSettings] = useState(() => {
+    const saved = localStorage.getItem('dashboard-settings');
+    return saved ? JSON.parse(saved) : {
+      theme: 'dark',
+      enableSounds: false,
+      autoReconnect: true,
+      showNotifications: true,
+      videoQuality: 'high',
+      dataRefreshRate: 100,
+      commandThrottle: 50,
+      maxTelemetryHistory: 50
+    };
+  });
+
+  // --- Telemetry history for charts ---
+  const {
+    batteryHistory,
+    gasHistory,
+    distanceHistory,
+    signalHistory,
+    addTelemetryPoint,
+    clearHistory
+  } = useTelemetryHistory(settings.maxTelemetryHistory);
+
   // --- WebSocket connection management ---
   const [connectionState, setConnectionState] = useState(ConnectionStates.DISCONNECTED);
   const [lastError, setLastError] = useState(null);
@@ -227,6 +268,7 @@ export default function DashboardEnhanced() {
           if (data.type === 'telemetry') {
             setTelemetry(data.payload);
             updateSystemHealth(data.payload);
+            addTelemetryPoint(data.payload); // Add to history for charts
             
             // Update performance metrics
             setPerformanceMetrics(prev => ({
@@ -382,6 +424,9 @@ export default function DashboardEnhanced() {
 
   // --- Connection lifecycle ---
   useEffect(() => {
+    // Simulate initial loading
+    setTimeout(() => setIsLoading(false), 1000);
+    
     connectWebSocket();
 
     return () => {
@@ -670,22 +715,46 @@ export default function DashboardEnhanced() {
   const connectionStatus = getConnectionStatusDisplay();
   const StatusIcon = connectionStatus.icon;
 
+  // Show loading state
+  if (isLoading) {
+    return <DashboardLoader />;
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-nightfall-primary via-nightfall-secondary to-nightfall-primary text-white">
+      {/* Settings Panel */}
+      <SettingsPanel
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        settings={settings}
+        onSettingsChange={(newSettings) => {
+          setSettings(newSettings);
+          localStorage.setItem('dashboard-settings', JSON.stringify(newSettings));
+        }}
+      />
+
+      {/* Fullscreen Video */}
+      <FullscreenVideo
+        isOpen={showFullscreenVideo}
+        onClose={() => setShowFullscreenVideo(false)}
+        cameraIp={telemetry.cam_ip}
+        cameraStatus={telemetry.camera_status}
+      />
+
       {/* Header */}
-      <header className="card p-6 m-6">
-        <div className="flex items-center justify-between">
+      <header className="card p-6 m-6 animate-slide-up">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <div className="bg-nightfall-accent p-3 rounded-lg glow">
               <Radio className="w-8 h-8 text-white" />
             </div>
             <div>
               <h1 className="text-3xl font-bold text-shadow">Project Nightfall — Mission Control</h1>
-              <p className="text-gray-400 text-sm">Enhanced rescue robot control dashboard</p>
+              <p className="text-gray-400 text-sm">Enhanced rescue robot control dashboard v2.0</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <div className={`status-indicator ${connectionStatus.className}`}>
               <StatusIcon className="w-5 h-5 mr-2" />
               {connectionStatus.text}
@@ -697,7 +766,40 @@ export default function DashboardEnhanced() {
             </div>
             
             {connectionStats.averageLatency > 0 && (
-              <div className="bg-gray-700 px-3 py-2 rounded-lg text-sm">
+              <Tooltip content="Average network latency">
+                <div className="bg-gray-700 px-3 py-2 rounded-lg text-sm">
+                  <div className="text-gray-400">Latency</div>
+                  <div className="font-mono">{connectionStats.averageLatency}ms</div>
+                </div>
+              </Tooltip>
+            )}
+
+            <Tooltip content="Dashboard Settings">
+              <button
+                onClick={() => setShowSettings(true)}
+                className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                aria-label="Open settings"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+            </Tooltip>
+
+            <Tooltip content={showAnalytics ? "Hide Analytics" : "Show Analytics"}>
+              <button
+                onClick={() => setShowAnalytics(!showAnalytics)}
+                className={`p-2 rounded-lg transition-colors ${
+                  showAnalytics 
+                    ? 'bg-nightfall-accent text-white' 
+                    : 'bg-gray-700 hover:bg-gray-600'
+                }`}
+                aria-label="Toggle analytics"
+              >
+                <BarChart3 className="w-5 h-5" />
+              </button>
+            </Tooltip>
+          </div>
+        </div>
+      </header>
                 <div className="text-gray-400">Latency</div>
                 <div className="font-mono">{connectionStats.averageLatency}ms</div>
               </div>
@@ -708,11 +810,47 @@ export default function DashboardEnhanced() {
 
       {/* Three-Zone Layout */}
       <div className="px-6 pb-6">
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 h-screen">
+        {/* Analytics Section (Optional) */}
+        {showAnalytics && (
+          <div className="mb-6 animate-slide-up">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <TelemetryChart
+                data={batteryHistory}
+                title="Battery Voltage"
+                color="#10b981"
+                icon={Battery}
+                unit="V"
+              />
+              <TelemetryChart
+                data={gasHistory}
+                title="Gas Level"
+                color="#f59e0b"
+                icon={Wind}
+                unit=""
+              />
+              <TelemetryChart
+                data={distanceHistory}
+                title="Distance"
+                color="#3b82f6"
+                icon={Gauge}
+                unit="cm"
+              />
+              <TelemetryChart
+                data={signalHistory}
+                title="WiFi Signal"
+                color="#8b5cf6"
+                icon={Signal}
+                unit="%"
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
           
           {/* Zone A: Video & Vision Processing (60% width) */}
-          <div className="xl:col-span-7 space-y-6">
-            <div className="card p-6 h-full">
+          <div className="xl:col-span-7 space-y-6 animate-slide-up">
+            <div className="card p-6 h-full card-hover">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold flex items-center gap-3">
                   <Eye className="w-6 h-6 text-robot-vision" />
@@ -726,6 +864,15 @@ export default function DashboardEnhanced() {
                   <div className="text-sm text-gray-400">
                     FPS: {videoFps}
                   </div>
+                  <Tooltip content="Fullscreen Mode">
+                    <button
+                      onClick={() => setShowFullscreenVideo(true)}
+                      className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                      aria-label="Fullscreen"
+                    >
+                      <Maximize2 className="w-4 h-4" />
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
 
@@ -788,8 +935,8 @@ export default function DashboardEnhanced() {
           </div>
 
           {/* Zone B: System Health Dashboard (25% width) */}
-          <div className="xl:col-span-3 space-y-6">
-            <div className="card p-6">
+          <div className="xl:col-span-3 space-y-6 animate-slide-in-right">
+            <div className="card p-6 card-hover">
               <h2 className="text-xl font-semibold mb-4 flex items-center gap-3">
                 <Cpu className="w-6 h-6 text-robot-brain" />
                 System Health
@@ -919,12 +1066,22 @@ export default function DashboardEnhanced() {
                   </div>
                 </div>
               </div>
+
+              {/* Data Export */}
+              <div className="mt-6 pt-4 border-t border-gray-700">
+                <DataExportPanel
+                  telemetry={telemetry}
+                  waypoints={waypoints}
+                  alerts={alerts}
+                  connectionStats={connectionStats}
+                />
+              </div>
             </div>
           </div>
 
           {/* Zone C: Command & Control Interface (40% width) */}
-          <div className="xl:col-span-2 space-y-6">
-            <div className="card p-6">
+          <div className="xl:col-span-2 space-y-6 animate-slide-in-right" style={{ animationDelay: '0.1s' }}>
+            <div className="card p-6 card-hover">
               <h2 className="text-xl font-semibold mb-4 flex items-center gap-3">
                 <Zap className="w-6 h-6 text-nightfall-accent" />
                 Control Interface
@@ -932,16 +1089,18 @@ export default function DashboardEnhanced() {
 
               {/* Mode Toggle */}
               <div className="mb-6">
-                <button 
-                  onClick={toggleMode}
-                  className={`w-full p-4 rounded-lg font-semibold transition-all duration-200 ${
-                    mode === 'autonomous' 
-                      ? 'bg-nightfall-success hover:bg-nightfall-success/90 text-white' 
-                      : 'bg-gray-700 hover:bg-gray-600 text-white'
-                  }`}
-                >
-                  {mode === 'autonomous' ? '🤖 Autonomous Mode' : '🎮 Manual Mode'}
-                </button>
+                <Tooltip content={mode === 'autonomous' ? 'Switch to manual control' : 'Switch to autonomous mode'}>
+                  <button 
+                    onClick={toggleMode}
+                    className={`w-full p-4 rounded-lg font-semibold transition-all duration-200 ${
+                      mode === 'autonomous' 
+                        ? 'bg-nightfall-success hover:bg-nightfall-success/90 text-white glow-green' 
+                        : 'bg-gray-700 hover:bg-gray-600 text-white'
+                    }`}
+                  >
+                    {mode === 'autonomous' ? '🤖 Autonomous Mode' : '🎮 Manual Mode'}
+                  </button>
+                </Tooltip>
               </div>
 
               {/* Movement Controls */}
@@ -1013,14 +1172,16 @@ export default function DashboardEnhanced() {
 
               {/* Emergency Stop */}
               <div className="mb-6">
-                <button 
-                  onClick={emergencyStop}
-                  className="emergency-stop w-full flex flex-col items-center justify-center"
-                  aria-label="Emergency stop"
-                >
-                  <Power className="w-8 h-8 mb-1" />
-                  <span className="text-xs font-bold">EMERGENCY</span>
-                </button>
+                <Tooltip content="Immediately stop all robot movement (Space/Esc)">
+                  <button 
+                    onClick={emergencyStop}
+                    className="emergency-stop w-full flex flex-col items-center justify-center"
+                    aria-label="Emergency stop"
+                  >
+                    <Power className="w-8 h-8 mb-1" />
+                    <span className="text-xs font-bold">EMERGENCY</span>
+                  </button>
+                </Tooltip>
               </div>
 
               {/* Current Motor State */}
@@ -1086,16 +1247,16 @@ export default function DashboardEnhanced() {
         </div>
 
         {/* Mission Planning Section */}
-        <div className="mt-6 grid grid-cols-1 xl:grid-cols-12 gap-6">
+        <div className="mt-6 grid grid-cols-1 xl:grid-cols-12 gap-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
           <div className="xl:col-span-7">
-            <div className="card p-6">
+            <div className="card p-6 card-hover">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold flex items-center gap-3">
                   <MapPin className="w-6 h-6 text-blue-400" />
                   Mission Map & Waypoints
                 </h2>
                 <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  isNavigating ? 'bg-nightfall-success text-white' : 'bg-gray-700 text-gray-300'
+                  isNavigating ? 'bg-nightfall-success text-white animate-pulse-glow' : 'bg-gray-700 text-gray-300'
                 }`}>
                   {isNavigating ? '🟢 Mission Active' : '⚫ Mission Idle'}
                 </div>
@@ -1111,7 +1272,8 @@ export default function DashboardEnhanced() {
                 />
               </div>
 
-              <p className="text-sm text-gray-400 mt-3">
+              <p className="text-sm text-gray-400 mt-3 flex items-center gap-2">
+                <Info className="w-4 h-4" />
                 Click on the map to add waypoints. The robot will navigate them in sequence during autonomous mode.
               </p>
 
@@ -1151,7 +1313,7 @@ export default function DashboardEnhanced() {
             </div>
           </div>
 
-          <div className="xl:col-span-5">
+          <div className="xl:col-spa card-hovern-5">
             <div className="card p-6">
               <h2 className="text-xl font-semibold mb-4 flex items-center gap-3">
                 <Navigation className="w-6 h-6 text-purple-400" />
@@ -1247,10 +1409,10 @@ export default function DashboardEnhanced() {
             </div>
 
             {/* Alerts Panel */}
-            <div className="card p-6 mt-6">
+            <div className="card p-6 mt-6 card-hover">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-nightfall-warning" />
-                System Alerts
+                System Alerts ({alerts.length})
               </h3>
               
               <div className="max-h-48 overflow-y-auto space-y-2">

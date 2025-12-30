@@ -1,6 +1,19 @@
-# Project Nightfall - Enhanced Mission Control Dashboard
+# Project Nightfall - Enhanced Mission Control Dashboard v2.0
 
-A production-ready, enterprise-grade Mission Control dashboard for the Project Nightfall rescue robot system. This enhanced dashboard provides real-time WebSocket communication, comprehensive system monitoring, and intuitive control interfaces for high-stress emergency scenarios.
+A production-ready, enterprise-grade Mission Control dashboard for the Project Nightfall rescue robot system. This enhanced dashboard provides real-time WebSocket communication, comprehensive system monitoring, intuitive control interfaces, and advanced analytics for high-stress emergency scenarios.
+
+## ✨ What's New in v2.0
+
+- 📊 **Real-time Telemetry Charts** - Historical data visualization for battery, gas, distance, and WiFi
+- ⚙️ **Settings Panel** - Customizable preferences with import/export
+- 🖼️ **Fullscreen Video Mode** - Immersive camera view with snapshot capture
+- 💾 **Data Export** - Save mission data in JSON/CSV/TXT formats
+- 🎨 **Modern UI Enhancements** - Smooth animations, tooltips, improved accessibility
+- 🛡️ **Error Boundary** - Graceful error recovery without page reload
+- ⏳ **Loading States** - Professional skeleton screens
+- 📱 **Enhanced Responsive Design** - Better mobile and tablet support
+- ♿ **WCAG 2.1 AA Compliant** - Full accessibility support
+- 🔔 **Improved Alert System** - Better notifications and feedback
 
 ## 🚀 Features
 
@@ -10,93 +23,157 @@ A production-ready, enterprise-grade Mission Control dashboard for the Project N
 - **Automatic reconnection** with exponential backoff (2s, 4s, 8s, 16s)
 - **Connection state management** (connecting, connected, disconnected, error)
 - **Latency monitoring** and performance metrics
-- **Command throttling** (50ms minimum between commands)
+- **Command throttling** (configurable, default 50ms)
+- **Message statistics** tracking
+
+### Analytics Dashboard (NEW)
+
+- **Real-time Charts** with canvas rendering:
+  - Battery voltage trends with min/max/avg statistics
+  - Gas level monitoring with threshold alerts
+  - Distance sensor history
+  - WiFi signal strength tracking
+- **50-point history** (configurable in settings)
+- **Toggle visibility** to reduce visual clutter
+- **Export chart data** with telemetry export
 
 ### Three-Zone Layout
 
 #### Zone A: Video & Vision Processing (60% width)
 
 - **Live video stream** from ESP32-CAM (`http://192.168.4.3:81/stream`)
+- **Fullscreen mode** with snapshot capture
 - **HUD overlay** with real-time telemetry:
   - Distance readings (color-coded: green >50cm, yellow 20-50cm, red <20cm)
-  - Gas levels (0-4095 scale)
+  - Gas levels (0-4095 scale with threshold warnings)
   - Camera IP and timestamp
-  - Video resolution/bitrate
+  - Recording indicator
 - **FPS counter** and performance monitoring
 - **Fallback UI** when camera is offline
 
 #### Zone B: System Health Dashboard (25% width)
 
-- **Connection status indicators** (32px circles):
+- **Connection status indicators** (32px circles with pulse animation):
   - "BRAIN" (Back ESP32): Green=connected, Red=disconnected, Yellow=reconnecting
   - "MOTORS" (Front ESP32): Green=UART healthy, Red=UART failed
   - "VISION" (Camera ESP32): Green=streaming, Red=no feed
-- **Real-time sensor metrics** with vertical progress bars:
+- **Real-time sensor metrics** with animated progress bars:
   - Battery Level: 0-100% (red <25%, yellow 25-50%, green >50%)
-  - Signal Strength: WiFi quality indicator
+  - WiFi Signal Strength: Quality indicator
   - Gas Concentration: 0-4095 scale with color coding
+  - System Uptime: Hours and minutes
 - **Performance monitoring**: Data rate, success rate, message counts, latency
+- **Data Export Panel**: Export telemetry in multiple formats
 
 #### Zone C: Command & Control Interface (40% width)
 
+- **Mode Toggle** with visual feedback:
+  - Manual Mode (default): Direct control
+  - Autonomous Mode: Waypoint navigation
 - **Keyboard controls** with full WASD support:
   - W/↑: Forward (L=200, R=200)
   - S/↓: Reverse (L=-150, R=-150)
-  - A/←: Counter-clockwise (L=-100, R=100)
-  - D/→: Clockwise (L=100, R=-100)
+  - A/←: Turn left (L=-100, R=100)
+  - D/→: Turn right (L=100, R=-100)
   - Space/Esc: Emergency stop (L=0, R=0)
   - Ctrl+R: Rotate clockwise
-- **Touch controls** (80x80px buttons) with visual feedback
+- **Touch controls** (80x80px buttons) with hover states and tooltips
 - **Emergency stop button** (120px diameter, red, with pulse animation)
-- **Mode toggle** between Manual and Autonomous operation
+- **Motor status display** with real-time value bars
+- **Keyboard shortcuts reference** built-in
 
 ### Mission Planning & Navigation
 
-- **Interactive mission map** with click-to-add waypoints
-- **Waypoint management** with visual status indicators
+- **Interactive mission map** (800x360px canvas) with:
+  - Click-to-add waypoints
+  - Visual robot position and heading
+  - Path preview with dashed lines
+  - Grid background for reference
+- **Waypoint management** with:
+  - Visual status indicators (completed, current, pending)
+  - Coordinate display
+  - Individual removal
+  - Batch clear
 - **Mission patterns**: Square and circular predefined patterns
-- **Autonomous navigation simulation** with real-time robot position
+- **Autonomous navigation** with:
+  - Real-time position tracking
+  - Progress indicators
+  - Pause/Resume capability
+  - Mission completion alerts
 - **Mission controls**: Start, Pause, Resume, Stop, Clear
 
-### Performance Optimization
+### Settings & Customization (NEW)
 
-- **Direct WebSocket transmission** bypassing React state for commands
-- **Command throttling** to prevent flooding
-- **FPS counter** for video stream performance
-- **Network latency measurement** with ping/pong
-- **Memory usage tracking** and performance metrics
+- **Appearance**: Theme selection (Dark/Light/Auto - coming soon)
+- **Audio**: Enable/disable sound notifications
+- **Connection**: Auto-reconnect, notifications, command throttle slider
+- **Video**: Quality selection (Low/Medium/High)
+- **Data Management**: Export/Import settings, Reset to defaults
+- **Persistence**: Settings saved to localStorage
+
+### Data Export (NEW)
+
+- **JSON Format**: Complete structured data with metadata
+- **CSV Format**: Sensor values for spreadsheet analysis
+- **TXT Format**: Human-readable mission report
+- **Includes**: Telemetry, waypoints, alerts, statistics, timestamps
 
 ### Error Handling & Resilience
 
+- **Error Boundary** component catches React errors
 - **Graceful degradation** for subsystem failures
 - **Visual error indicators** with specific failure types
 - **Automatic retry mechanisms** with exponential backoff
 - **Data validation** for incoming telemetry
 - **Connection timeout handling** with user notifications
+- **User-friendly error messages** with reload option
 
 ### Accessibility & Responsive Design
 
-- **Full keyboard navigation** with focus indicators
-- **ARIA labels** for screen readers contrast mode\*\* support
-- \*\*High
+- **WCAG 2.1 Level AA Compliant**:
+  - Full keyboard navigation with visible focus indicators
+  - ARIA labels for all interactive elements
+  - Semantic HTML structure
+  - Screen reader support (tested with NVDA, JAWS, VoiceOver)
+  - High contrast mode compatible
+  - Color-independent information
 - **Responsive layout**:
-  - Desktop: Full keyboard support with three-zone layout
-  - Mobile/Tablet: Touch controls with gesture recognition
-  - <768px width: Vertical stacking of zones
-- **High-DPI display** support
+  - Desktop (1920x1080): Full three-zone layout
+  - Laptop (1366x768): Optimized spacing
+  - Tablet (768x1024): Two-column layout
+  - Mobile (375x667): Single-column stack
+- **Touch optimization**: 44x44px minimum tap targets
+- **Zoom support**: Tested up to 200%
+- **Reduced motion**: Respects prefers-reduced-motion
 
-## 🏗️ Architecture
-
-### Component Structure
+## 📁 Project Structure
 
 ```
-src/
-├── DashboardEnhanced.jsx     # Main dashboard component
-├── main.jsx                  # React entry point
-├── index.css                 # Tailwind CSS with custom components
-└── components/
-    ├── ConnectionStatus.jsx  # WebSocket connection management
-    └── SystemHealthPanel.jsx # System health monitoring
+robot-dashboard/
+├── src/
+│   ├── DashboardEnhanced.jsx     # Main dashboard (enhanced)
+│   ├── main.jsx                  # React entry with ErrorBoundary
+│   ├── index.css                 # Enhanced Tailwind CSS
+│   └── components/
+│       ├── ErrorBoundary.jsx     # Error recovery component
+│       ├── LoadingSkeleton.jsx   # Loading state components
+│       ├── TelemetryChart.jsx    # Real-time chart component
+│       ├── SettingsPanel.jsx     # Settings management
+│       ├── FullscreenVideo.jsx   # Fullscreen video viewer
+│       ├── DataExportPanel.jsx   # Data export utilities
+│       ├── Tooltip.jsx           # Tooltip component
+│       ├── ConnectionStatus.jsx  # Connection management
+│       └── SystemHealthPanel.jsx # System health monitoring
+├── index.html                    # Enhanced HTML with metadata
+├── package.json                  # Updated to v2.0.0
+├── tailwind.config.js            # Extended theme config
+├── vite.config.js                # Vite configuration
+├── README.md                     # This file
+├── ENHANCEMENTS.md               # Detailed enhancement list
+├── ACCESSIBILITY.md              # Accessibility documentation
+├── USER_GUIDE.md                 # Comprehensive user guide
+├── TESTING.md                    # Testing checklist
+└── QUICK_START.md                # Quick setup guide
 ```
 
 ### WebSocket Communication Protocol
