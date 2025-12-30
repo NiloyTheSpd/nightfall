@@ -45,22 +45,22 @@ int targetFrontRightSpeed = 0;
 int targetCenterLeftSpeed = 0;
 int targetCenterRightSpeed = 0;
 
-// Motor driver pin assignments per pin.md
-// Motor Driver 1 (Front Left/Right) - GPIO13,14,18,19
-#define MOTOR1_LEFT_PWM 13
-#define MOTOR1_LEFT_IN1 14
-#define MOTOR1_LEFT_IN2 18
-#define MOTOR1_RIGHT_PWM 19
-#define MOTOR1_RIGHT_IN1 23
-#define MOTOR1_RIGHT_IN2 25
+// Motor driver pin assignments from config.h
+// Motor Driver 1 (Front Left/Right) - using config.h definitions
+#define MOTOR1_LEFT_PWM PIN_MOTOR_1    // GPIO13 - PWM speed control
+#define MOTOR1_LEFT_IN1 PIN_MOTOR_2    // GPIO14 - Direction control
+#define MOTOR1_LEFT_IN2 PIN_MOTOR_3    // GPIO18 - Direction control
+#define MOTOR1_RIGHT_PWM PIN_MOTOR_4   // GPIO19 - Direction control
+#define MOTOR1_RIGHT_IN1 PIN_MOTOR_5   // GPIO23 - PWM speed control
+#define MOTOR1_RIGHT_IN2 PIN_MOTOR_6   // GPIO27 - Direction control
 
-// Motor Driver 2 (Center Left/Right) - GPIO21,23,25,26,27
-#define MOTOR2_LEFT_PWM 21
-#define MOTOR2_LEFT_IN1 23
-#define MOTOR2_LEFT_IN2 25
-#define MOTOR2_RIGHT_PWM 26
-#define MOTOR2_RIGHT_IN1 27
-#define MOTOR2_RIGHT_IN2 13 // Reusing GPIO13 for additional control
+// Motor Driver 2 (Center Left/Right) - using config.h definitions
+#define MOTOR2_LEFT_PWM PIN_MOTOR_5    // GPIO21 - PWM speed control
+#define MOTOR2_LEFT_IN1 PIN_MOTOR_6    // GPIO23 - Direction control
+#define MOTOR2_LEFT_IN2 PIN_MOTOR_7    // GPIO25 - Direction control
+#define MOTOR2_RIGHT_PWM PIN_MOTOR_8   // GPIO26 - Direction control
+#define MOTOR2_RIGHT_IN1 PIN_MOTOR_9   // GPIO27 - Direction control
+#define MOTOR2_RIGHT_IN2 PIN_MOTOR_1   // GPIO13 - Reusing for additional control
 
 // Function declarations
 void setup();
