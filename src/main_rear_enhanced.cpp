@@ -72,6 +72,7 @@ int smokeLevel = 0;
 float batteryVoltage = 14.8;
 unsigned long uptime = 0;
 int connectionStatus = 0; // 0=disconnected, 1=connected, 2=front ESP32 online
+unsigned long lastFrontHeartbeat = 0;
 
 // WiFi configuration
 const char *ssid = "ProjectNightfall";
@@ -126,8 +127,8 @@ void setup()
     // Initialize hardware
     initializeHardware();
 
-    // Setup UART communication with Front ESP32
-    Serial2.begin(UART_BAUDRATE);
+    // Setup UART communication with Front ESP32 on fixed Serial2 pins (RX2=16, TX2=17)
+    Serial2.begin(UART_BAUDRATE, SERIAL_8N1, 16, 17);
 
     // Setup WiFi and WebServer
     setupWiFi();
@@ -172,7 +173,7 @@ void initializeHardware()
     pinMode(PIN_GAS_ANALOG, INPUT);  // MQ-2 Gas Sensor Analog Output (A0)
     pinMode(PIN_GAS_DIGITAL, INPUT); // MQ-2 Gas Sensor Digital Output (D0/Buzzer)
 
-    // Initialize UART Master - Wiring: TX22->RX22(Front), RX21->TX23(Front)
+    // Initialize UART Master - Wiring: TX2=GPIO17 -> RX2=GPIO16 (Front), RX2=GPIO16 <- TX2=GPIO17 (Front)
     pinMode(PIN_UART_TX, OUTPUT); // UART TX to Front ESP32 Slave
     pinMode(PIN_UART_RX, INPUT);  // UART RX from Front ESP32 Slave
 
@@ -183,7 +184,7 @@ void initializeHardware()
     DEBUG_PRINTLN("Motors: GPIO13,14,18,19,23,27 (L298N Driver)");
     DEBUG_PRINTLN("Ultrasonic: GPIO4 (Trig), GPIO36 (Echo - requires voltage divider!)");
     DEBUG_PRINTLN("Gas Sensor: GPIO32 (A0), GPIO33 (D0/Buzzer)");
-    DEBUG_PRINTLN("UART: GPIO22 (TX), GPIO21 (RX) to Front ESP32");
+    DEBUG_PRINTLN("UART: GPIO17 (TX), GPIO16 (RX) to Front ESP32");
 }
 
 void stopAllRearMotors()
@@ -489,29 +490,33 @@ void updateMotorControl()
     rearLeftSpeed = constrain(rearLeftSpeed, -255, 255);
     rearRightSpeed = constrain(rearRightSpeed, -255, 255);
 
-    // Update rear motor outputs - L298N Driver on GPIO13,14,18,19,23,27
-    // Motor control logic would be implemented here based on L298N pin mapping
-    // For now, using simple digital outputs as placeholder
-    if (rearLeftSpeed != 0)
+    // Update rear motor outputs - L298N Driver per pin.md
+    // Left motor: ENA=GPIO13 (PWM), IN1=GPIO14, IN2=GPIO18
+    if (rearLeftSpeed >= 0)
     {
-        digitalWrite(PIN_MOTOR_1, HIGH);
-        digitalWrite(PIN_MOTOR_2, rearLeftSpeed > 0 ? LOW : HIGH);
+        analogWrite(PIN_MOTOR_1, rearLeftSpeed); // PWM on ENA
+        digitalWrite(PIN_MOTOR_2, HIGH);         // IN1 forward
+        digitalWrite(PIN_MOTOR_3, LOW);          // IN2 forward
     }
     else
     {
-        digitalWrite(PIN_MOTOR_1, LOW);
-        digitalWrite(PIN_MOTOR_2, LOW);
+        analogWrite(PIN_MOTOR_1, abs(rearLeftSpeed)); // PWM on ENA
+        digitalWrite(PIN_MOTOR_2, LOW);               // IN1 reverse
+        digitalWrite(PIN_MOTOR_3, HIGH);              // IN2 reverse
     }
 
-    if (rearRightSpeed != 0)
+    // Right motor: ENB=GPIO27 (PWM), IN3=GPIO19, IN4=GPIO23
+    if (rearRightSpeed >= 0)
     {
-        digitalWrite(PIN_MOTOR_3, HIGH);
-        digitalWrite(PIN_MOTOR_4, rearRightSpeed > 0 ? LOW : HIGH);
+        analogWrite(PIN_MOTOR_6, rearRightSpeed); // PWM on ENB
+        digitalWrite(PIN_MOTOR_4, HIGH);          // IN3 forward
+        digitalWrite(PIN_MOTOR_5, LOW);           // IN4 forward
     }
     else
     {
-        digitalWrite(PIN_MOTOR_3, LOW);
-        digitalWrite(PIN_MOTOR_4, LOW);
+        analogWrite(PIN_MOTOR_6, abs(rearRightSpeed)); // PWM on ENB
+        digitalWrite(PIN_MOTOR_4, LOW);                // IN3 reverse
+        digitalWrite(PIN_MOTOR_5, HIGH);               // IN4 reverse
     }
 }
 
@@ -544,11 +549,14 @@ void handleUARTCommunication()
             JsonDocument doc;
             DeserializationError error = deserializeJson(doc, message);
 
-            if (!error && doc["type"].is<const char *>())
+            if (!error)
             {
-                if (doc["type"] == "heartbeat")
+                const char *msgType = doc["type"] | "";
+
+                if (strcmp(msgType, "heartbeat") == 0)
                 {
                     connectionStatus = 2; // Front ESP32 online
+                    lastFrontHeartbeat = millis();
                     frontLeftSpeed = doc["leftSpeed"] | 0;
                     frontRightSpeed = doc["rightSpeed"] | 0;
                 }
@@ -559,11 +567,10 @@ void handleUARTCommunication()
 
 void checkFrontESP32Connection()
 {
-    static unsigned long lastHeartbeat = 0;
     unsigned long now = millis();
 
     // If no heartbeat for 3 seconds, mark as disconnected
-    if (now - lastHeartbeat > 3000)
+    if (now - lastFrontHeartbeat > 3000)
     {
         if (connectionStatus == 2)
         {

@@ -233,8 +233,8 @@
  * - Ultrasonic (HC-SR04): GPIO4 (Trig), GPIO36 (Echo with voltage divider)
  *
  * COMMUNICATION:
- * - UART Master-Slave: GPIO22 (TX), GPIO21 (RX) between rear-front ESP32
- * - UART Master-Camera: GPIO1 (TX), GPIO3 (RX) between rear-ESP32-CAM
+ * - UART Master-Slave: GPIO17 (TX2), GPIO16 (RX2) between rear-front ESP32
+ * - UART Master-Camera: GPIO1 (TX0), GPIO3 (RX0) between rear-ESP32-CAM
  *
  * STATUS/INDICATORS:
  * - Buzzer: GPIO33 (rear ESP32)

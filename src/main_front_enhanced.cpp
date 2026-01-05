@@ -97,8 +97,8 @@ void setup()
     // Initialize hardware
     initializeHardware();
 
-    // Initialize UART communication with Rear ESP32
-    Serial2.begin(UART_BAUDRATE);
+    // Initialize UART communication with Rear ESP32 on fixed Serial2 pins (RX2=16, TX2=17)
+    Serial2.begin(UART_BAUDRATE, SERIAL_8N1, 16, 17);
 
     systemReady = true;
     lastUARTUpdate = millis();

@@ -32,6 +32,9 @@
 #define BACKUP_DURATION 1000  // ms
 
 // ===== SAFETY THRESHOLDS =====
+#ifndef SAFE_DISTANCE
+#define SAFE_DISTANCE 30.0 // cm - warning threshold before emergency stop
+#endif
 #ifndef EMERGENCY_STOP_DISTANCE
 #define EMERGENCY_STOP_DISTANCE 20.0 // cm - SAFETY OVERRIDE TRIGGER
 #endif
