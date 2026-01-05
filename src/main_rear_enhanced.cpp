@@ -1,870 +1,336 @@
 /**
  * @file    main_rear_enhanced.cpp
- * @brief   Project Nightfall - Enhanced Rear ESP32 (Master Controller)
- * @author  Project Nightfall Team
- * @version 3.0.0
- * @date    December 30, 2025
- *
- * Enhanced master controller for manual six-motor rescue robot. Handles:
- * - WiFi Access Point creation (ProjectNightfall/rescue2025)
- * - WebSocket Server on port 8888 for Dashboard communication
- * - Six motor control (4 via Front ESP32 + 2 direct rear motors)
- * - Enhanced sensor monitoring (2x Ultrasonic + Gas + Smoke)
- * - Safety override system (Distance < 20cm OR Gas/Smoke > threshold)
- * - Real-time telemetry broadcasting every 500ms
- * - Buzzer and smoke alarm integration
+ * @brief   Project Nightfall - V3.2 Autonomous Master
+ * @date    January 6, 2026
  */
 
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
-#include <ArduinoJson.hpp>
 #include <ESPAsyncWebServer.h>
 
-// Note: REAR_CONTROLLER defined in platformio.ini build flags
+// --- HARDWARE PINS (STRICT) ---
+#ifndef PIN_MOTOR_1
+  #define PIN_MOTOR_1 13
+  #define PIN_MOTOR_2 14
+  #define PIN_MOTOR_3 18
+  #define PIN_MOTOR_4 19
+  #define PIN_MOTOR_5 23
+  #define PIN_MOTOR_6 27
+  #define PIN_US_TRIG 4
+  #define PIN_US_ECHO 36
+  #define PIN_GAS_ANALOG 32
+  #define PIN_GAS_DIGITAL 33
+#endif
 
-// Include our libraries
-#include "config.h"
-#include "pins.h"
-
-// Forward declarations
-void stopAllRearMotors();
-
-// Global objects
+// --- GLOBALS ---
 AsyncWebServer webServer(80);
 WebSocketsServer webSocketServer(8888);
 
-// System state
+// Timers
+unsigned long currentMillis = 0;
 unsigned long lastSensorUpdate = 0;
 unsigned long lastTelemetryUpdate = 0;
 unsigned long lastMotorUpdate = 0;
-bool systemReady = false;
-
-// Safety system
-bool emergencyStop = false;
-unsigned long emergencyTimestamp = 0;
-bool buzzerActive = false;
-unsigned long lastBuzzerUpdate = 0;
-bool alarmActive = false;
-
-// Motor control state - Six motors total
-int frontLeftSpeed = 0;   // Motor 1 (via UART to Front ESP32)
-int frontRightSpeed = 0;  // Motor 2 (via UART to Front ESP32)
-int rearLeftSpeed = 0;    // Motor 3 (direct rear control)
-int rearRightSpeed = 0;   // Motor 4 (direct rear control)
-int centerLeftSpeed = 0;  // Motor 5 (via UART to Front ESP32)
-int centerRightSpeed = 0; // Motor 6 (via UART to Front ESP32)
-
-// Target speeds for smooth control
-int targetFrontLeftSpeed = 0;
-int targetFrontRightSpeed = 0;
-int targetRearLeftSpeed = 0;
-int targetRearRightSpeed = 0;
-int targetCenterLeftSpeed = 0;
-int targetCenterRightSpeed = 0;
-
-// Enhanced telemetry data
-float frontDistance = 0.0;
-float rearDistance = 0.0;
-int gasLevel = 0;
-int smokeLevel = 0;
-float batteryVoltage = 14.8;
-unsigned long uptime = 0;
-int connectionStatus = 0; // 0=disconnected, 1=connected, 2=front ESP32 online
 unsigned long lastFrontHeartbeat = 0;
+unsigned long emergencyTimestamp = 0;
+unsigned long lastBuzzerUpdate = 0;
 
-// WiFi configuration
+// System State
+bool emergencyStop = false;
+bool buzzerActive = false;
+int connectionStatus = 0; 
+
+// --- AUTONOMOUS VARIABLES ---
+bool autoMode = false;           // Is Auto Mode ON?
+int autoState = 0;               // 0=Forward, 1=Backing, 2=Turning
+unsigned long autoTimer = 0;     // Timer for auto maneuvers
+
+// Motor State
+int targetFrontLeft = 0, targetFrontRight = 0;
+int targetRearLeft = 0, targetRearRight = 0;
+int targetCenterLeft = 0, targetCenterRight = 0;
+int currentRearLeft = 0, currentRearRight = 0;
+
+// Sensors
+float frontDistance = 400.0;
+int gasLevel = 0;
+float batteryVoltage = 14.8;
+bool frontSensorValid = false;
+
 const char *ssid = "ProjectNightfall";
 const char *password = "rescue2025";
 
-// Sensor validation
-unsigned long lastFrontDistanceTime = 0;
-unsigned long lastRearDistanceTime = 0;
-bool frontSensorValid = false;
-bool rearSensorValid = false;
-
-// Function declarations
-void setup();
-void loop();
-void initializeHardware();
-void setupWiFi();
-void setupWebServer();
-void handleMainLoop();
+// Prototypes
 void updateSensors();
-void validateSensorData();
-void checkSafetyConditions();
-void updateMotorControl();
-void sendMotorCommandsToFront();
+void checkSafety();
+void updateMotors();
+void sendToFront();
+void handleUART();
 void sendTelemetry();
-void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length);
-void processDriveCommand(const JsonDocument &doc);
-void activateEmergencyStop(const String &reason);
-void deactivateEmergencyStop();
-void soundBuzzer(int duration);
-void updateBuzzer();
-void activateSmokeAlarm();
-void updateSmokeAlarm();
-void sendStatusToWebSocket();
-String formatTelemetryJSON();
-String formatStatusJSON();
-void handleUARTCommunication();
-void checkFrontESP32Connection();
+void processCommand(const JsonDocument &doc);
+void setBuzzer(bool state);
+void runAutonomousLogic(); // NEW FUNCTION
+void stopAll();
+void addCors(AsyncWebServerResponse *response);
 
-// Setup function
-void setup()
-{
-    // Initialize serial communication
+void setup() {
     Serial.begin(115200);
-    DEBUG_PRINTLN();
-    DEBUG_PRINTLN("╔═══════════════════════════════════════════╗");
-    DEBUG_PRINTLN("║     PROJECT NIGHTFALL ENHANCED REAR ESP32 ║");
-    DEBUG_PRINTLN("║          Six-Motor Master Controller      ║");
-    DEBUG_PRINTLN("║              Version 3.0.0                ║");
-    DEBUG_PRINTLN("╚═══════════════════════════════════════════╝");
-    DEBUG_PRINTLN();
+    
+    // Hardware Init
+    pinMode(PIN_MOTOR_1, OUTPUT); pinMode(PIN_MOTOR_2, OUTPUT);
+    pinMode(PIN_MOTOR_3, OUTPUT); pinMode(PIN_MOTOR_4, OUTPUT);
+    pinMode(PIN_MOTOR_5, OUTPUT); pinMode(PIN_MOTOR_6, OUTPUT);
+    pinMode(PIN_US_TRIG, OUTPUT); pinMode(PIN_US_ECHO, INPUT);
+    pinMode(PIN_GAS_ANALOG, INPUT); pinMode(PIN_GAS_DIGITAL, INPUT); 
 
-    // Initialize hardware
-    initializeHardware();
-
-    // Setup UART communication with Front ESP32 on fixed Serial2 pins (RX2=16, TX2=17)
-    Serial2.begin(UART_BAUDRATE, SERIAL_8N1, 16, 17);
-
-    // Setup WiFi and WebServer
-    setupWiFi();
-    setupWebServer();
-
-    systemReady = true;
-    DEBUG_PRINTLN();
-    DEBUG_PRINTLN("✅ ENHANCED REAR ESP32 Master Controller Ready!");
-    DEBUG_PRINT("WiFi AP: ");
-    DEBUG_PRINTLN(ssid);
-    DEBUG_PRINT("WebSocket Server: Port 8888");
-    DEBUG_PRINTLN();
-    DEBUG_PRINTLN("Dashboard URL: http://192.168.4.1");
-    DEBUG_PRINTLN("Six-Motor Architecture: 4 Front + 2 Rear");
-    DEBUG_PRINTLN();
-}
-
-// Main loop
-void loop()
-{
-    handleMainLoop();
-    yield();
-}
-
-void initializeHardware()
-{
-    DEBUG_PRINTLN("Initializing six-motor control hardware...");
-
-    // Initialize Rear Motors (L298N Driver) - Wiring: VCC->14.8V, GND->GND, IN1-4->GPIO13,14,18,19,23,27
-    pinMode(PIN_MOTOR_1, OUTPUT); // Motor 1 Control
-    pinMode(PIN_MOTOR_2, OUTPUT); // Motor 2 Control
-    pinMode(PIN_MOTOR_3, OUTPUT); // Motor 3 Control
-    pinMode(PIN_MOTOR_4, OUTPUT); // Motor 4 Control
-    pinMode(PIN_MOTOR_5, OUTPUT); // Motor 5 Control
-    pinMode(PIN_MOTOR_6, OUTPUT); // Motor 6 Control
-
-    // Initialize HC-SR04 Ultrasonic Sensor - Wiring: VCC->5V, GND->GND, Trig->GPIO4, Echo->GPIO36 (with voltage divider!)
-    pinMode(PIN_US_TRIG, OUTPUT); // HC-SR04 Trigger Pin (5V output from ESP32)
-    pinMode(PIN_US_ECHO, INPUT);  // HC-SR04 Echo Pin (5V input - REQUIRES 5V->3.3V voltage divider!)
-
-    // Initialize MQ-2 Gas Sensor - Wiring: VCC->3.3V, GND->GND, A0->GPIO32, D0->GPIO33
-    pinMode(PIN_GAS_ANALOG, INPUT);  // MQ-2 Gas Sensor Analog Output (A0)
-    pinMode(PIN_GAS_DIGITAL, INPUT); // MQ-2 Gas Sensor Digital Output (D0/Buzzer)
-
-    // Initialize UART Master - Wiring: TX2=GPIO17 -> RX2=GPIO16 (Front), RX2=GPIO16 <- TX2=GPIO17 (Front)
-    pinMode(PIN_UART_TX, OUTPUT); // UART TX to Front ESP32 Slave
-    pinMode(PIN_UART_RX, INPUT);  // UART RX from Front ESP32 Slave
-
-    // Stop all motors initially
-    stopAllRearMotors();
-
-    DEBUG_PRINTLN("Six-motor hardware initialized");
-    DEBUG_PRINTLN("Motors: GPIO13,14,18,19,23,27 (L298N Driver)");
-    DEBUG_PRINTLN("Ultrasonic: GPIO4 (Trig), GPIO36 (Echo - requires voltage divider!)");
-    DEBUG_PRINTLN("Gas Sensor: GPIO32 (A0), GPIO33 (D0/Buzzer)");
-    DEBUG_PRINTLN("UART: GPIO17 (TX), GPIO16 (RX) to Front ESP32");
-}
-
-void stopAllRearMotors()
-{
-    // Stop all rear motors
-    digitalWrite(PIN_MOTOR_1, LOW);
-    digitalWrite(PIN_MOTOR_2, LOW);
-    digitalWrite(PIN_MOTOR_3, LOW);
-    digitalWrite(PIN_MOTOR_4, LOW);
-    digitalWrite(PIN_MOTOR_5, LOW);
-    digitalWrite(PIN_MOTOR_6, LOW);
-}
-
-void setupWiFi()
-{
-    DEBUG_PRINTLN("Setting up WiFi Access Point...");
-
-    // Create WiFi access point
+    Serial2.begin(115200, SERIAL_8N1, 16, 17);
     WiFi.softAP(ssid, password);
-    IPAddress IP = WiFi.softAPIP();
+    
+    // React API
+    webServer.on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request){
+        AsyncWebServerResponse *response = request->beginResponse(200, "application/json", "{\"status\":\"online\"}");
+        addCors(response);
+        request->send(response);
+    });
+    webServer.onNotFound([](AsyncWebServerRequest *request) {
+        if (request->method() == HTTP_OPTIONS) {
+            AsyncWebServerResponse *response = request->beginResponse(200);
+            addCors(response);
+            request->send(response);
+        } else request->send(404);
+    });
 
-    DEBUG_PRINT("Access Point IP: ");
-    DEBUG_PRINTLN(IP);
-    DEBUG_PRINT("SSID: ");
-    DEBUG_PRINTLN(ssid);
-    DEBUG_PRINT("Password: ");
-    DEBUG_PRINTLN(password);
-}
-
-void setupWebServer()
-{
-    DEBUG_PRINTLN("Setting up Web Server and WebSocket Server...");
-
-    // Serve main dashboard - enhanced with six-motor controls
-    String index_html = R"(<!DOCTYPE html>
-<html><head><title>Project Nightfall - Six-Motor Robot Control</title>
-<meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>
-<style>
-body{font-family:Arial;margin:20px;background:#1a1a1a;color:#fff}
-.container{max-width:1000px;margin:0 auto}
-.card{background:#2d2d2d;border-radius:10px;padding:20px;margin:10px 0}
-.status{display:inline-block;padding:5px 15px;border-radius:20px;margin:5px}
-.normal{background:#28a745}.warning{background:#ffc107;color:#000}.error{background:#dc3545}
-.button{background:#007bff;color:white;border:none;padding:10px 20px;margin:5px;border-radius:5px;cursor:pointer}
-.button:hover{background:#0056b3}
-.button.emergency{background:#dc3545}
-.button.emergency:hover{background:#c82333}
-.telemetry{font-size:1.1em;margin:10px 0}
-.sensor-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.motor-status{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-</style></head>
-<body><div class='container'>
-<h1>🤖 Project Nightfall - Six-Motor Rescue Robot</h1>
-<div class='card'><h2>System Status</h2>
-<div class='telemetry'>Robot State: <span id='robotState' class='status normal'>READY</span></div>
-<div class='telemetry'>Uptime: <span id='uptime'>0s</span></div>
-<div class='telemetry'>Emergency: <span id='emergency' class='status normal'>NO</span></div>
-<div class='telemetry'>Front ESP32: <span id='frontStatus'>OFFLINE</span></div></div>
-<div class='card'><h2>Enhanced Sensor Data</h2>
-<div class='sensor-grid'>
-<div class='telemetry'>Front Distance: <span id='frontDistance'>0</span> cm</div>
-<div class='telemetry'>Rear Distance: <span id='rearDistance'>0</span> cm</div>
-<div class='telemetry'>Gas Level: <span id='gasLevel'>0</span></div>
-<div class='telemetry'>Smoke Level: <span id='smokeLevel'>0</span></div>
-</div>
-<div class='telemetry'>Battery: <span id='battery'>14.8</span> V</div></div>
-<div class='card'><h2>Six-Motor Manual Control</h2>
-<div class='motor-status'>
-<div><strong>Front Motors (1-4)</strong><br>Via Front ESP32</div>
-<div><strong>Rear Motors (5-6)</strong><br>Direct Control</div>
-<div><strong>System Status</strong><br><span id='motorStatus'>ALL STOPPED</span></div>
-</div>
-<button class='button' onclick='sendCommand("forward")'>⬆️ Forward (All Motors)</button>
-<button class='button' onclick='sendCommand("left")'>⬅️ Turn Left</button>
-<button class='button' onclick='sendCommand("right")'>➡️ Turn Right</button>
-<button class='button' onclick='sendCommand("backward")'>⬇️ Backward</button>
-<button class='button' onclick='sendCommand("stop")'>⏹️ Stop All Motors</button>
-<button class='button emergency' onclick='sendCommand("emergency")'>🚨 Emergency Stop</button></div>
-<div class='card'><h2>Individual Motor Test</h2>
-<button class='button' onclick='sendCommand("test_front")'>Test Front Motors</button>
-<button class='button' onclick='sendCommand("test_rear")'>Test Rear Motors</button>
-<button class='button' onclick='sendCommand("test_all")'>Test All Motors</button></div>
-</div>
-<script>
-var ws = new WebSocket('ws://192.168.4.1:8888');
-ws.onopen = function(){console.log('Connected to six-motor robot');};
-ws.onmessage = function(event){
-var data = JSON.parse(event.data);
-if(data.type === 'telemetry'){
-document.getElementById('frontDistance').textContent = data.dist.toFixed(1);
-document.getElementById('rearDistance').textContent = data.rearDist.toFixed(1);
-document.getElementById('gasLevel').textContent = data.gas;
-document.getElementById('smokeLevel').textContent = data.smoke;
-document.getElementById('battery').textContent = data.battery.toFixed(1);
-document.getElementById('uptime').textContent = Math.floor(data.uptime/1000) + 's';
-document.getElementById('emergency').textContent = data.emergency ? 'YES' : 'NO';
-document.getElementById('emergency').className = 'status ' + (data.emergency ? 'error' : 'normal');
-document.getElementById('frontStatus').textContent = data.frontOnline ? 'ONLINE' : 'OFFLINE';
-document.getElementById('frontStatus').className = 'status ' + (data.frontOnline ? 'normal' : 'warning');
-document.getElementById('motorStatus').textContent = data.motorsActive ? 'MOTORS ACTIVE' : 'ALL STOPPED';
-}
-};
-function sendCommand(cmd){ws.send(JSON.stringify({command: cmd}));}
-</script></body></html>)";
-
-    webServer.on("/", HTTP_GET, [&index_html](AsyncWebServerRequest *request)
-                 { request->send(200, "text/html", index_html); });
-
-    // Enhanced API endpoints
-    webServer.on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request)
-                 {
-        JsonDocument doc;
-        doc["status"] = "online";
-        doc["version"] = VERSION_STRING;
-        doc["uptime"] = millis();
-        doc["emergency"] = emergencyStop;
-        doc["frontDistance"] = frontDistance;
-        doc["rearDistance"] = rearDistance;
-        doc["gasLevel"] = gasLevel;
-        doc["smokeLevel"] = smokeLevel;
-        doc["battery"] = batteryVoltage;
-        doc["frontOnline"] = (connectionStatus == 2);
-        doc["motorsActive"] = (frontLeftSpeed != 0 || frontRightSpeed != 0 || rearLeftSpeed != 0 || rearRightSpeed != 0);
-        
-        String response;
-        serializeJson(doc, response);
-        request->send(200, "application/json", response); });
-
-    webServer.on("/api/telemetry", HTTP_GET, [](AsyncWebServerRequest *request)
-                 {
-        String telemetry = formatTelemetryJSON();
-        request->send(200, "application/json", telemetry); });
-
-    webServer.on("/api/motors", HTTP_GET, [](AsyncWebServerRequest *request)
-                 {
-        JsonDocument doc;
-        doc["frontLeft"] = frontLeftSpeed;
-        doc["frontRight"] = frontRightSpeed;
-        doc["rearLeft"] = rearLeftSpeed;
-        doc["rearRight"] = rearRightSpeed;
-        doc["emergency"] = emergencyStop;
-        
-        String response;
-        serializeJson(doc, response);
-        request->send(200, "application/json", response); });
-
-    // Start web server
     webServer.begin();
-
-    // Start WebSocket server
     webSocketServer.begin();
-    webSocketServer.onEvent(handleWebSocketEvent);
-
-    DEBUG_PRINTLN("Enhanced web server started on port 80");
-    DEBUG_PRINTLN("Enhanced WebSocket server started on port 8888");
-}
-
-void handleMainLoop()
-{
-    unsigned long now = millis();
-
-    // Handle WebSocket
-    webSocketServer.loop();
-
-    // Update sensors every 100ms with validation
-    if (now - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL)
-    {
-        updateSensors();
-        validateSensorData();
-        checkSafetyConditions();
-        lastSensorUpdate = now;
-    }
-
-    // Send telemetry every 500ms
-    if (now - lastTelemetryUpdate >= TELEMETRY_INTERVAL)
-    {
-        sendTelemetry();
-        lastTelemetryUpdate = now;
-    }
-
-    // Update motor control every 50ms for smooth operation
-    if (now - lastMotorUpdate >= 50)
-    {
-        updateMotorControl();
-        sendMotorCommandsToFront();
-        lastMotorUpdate = now;
-    }
-
-    // Handle UART communication with Front ESP32
-    handleUARTCommunication();
-
-    // Check Front ESP32 connection
-    checkFrontESP32Connection();
-
-    // Update buzzer and smoke alarm
-    updateBuzzer();
-    updateSmokeAlarm();
-}
-
-void updateSensors()
-{
-    // HC-SR04 Ultrasonic Sensor with validation - Wiring: Trig->GPIO4, Echo->GPIO36 (with voltage divider!)
-    digitalWrite(PIN_US_TRIG, LOW);
-    delayMicroseconds(2);
-    digitalWrite(PIN_US_TRIG, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(PIN_US_TRIG, LOW);
-
-    long duration = pulseIn(PIN_US_ECHO, HIGH, 30000);
-    if (duration > 0 && duration < 30000)
-    {
-        frontDistance = duration * 0.034 / 2;
-        if (frontDistance >= 2.0 && frontDistance <= 400.0)
-        {
-            frontSensorValid = true;
-            lastFrontDistanceTime = millis();
-        }
-        else
-        {
-            frontDistance = 400.0; // Max range for invalid readings
-            frontSensorValid = false;
-        }
-    }
-    else
-    {
-        frontDistance = 400.0;
-        frontSensorValid = false;
-    }
-
-    // MQ-2 Gas Sensor with digital threshold check - Wiring: A0->GPIO32, D0->GPIO33
-    gasLevel = analogRead(PIN_GAS_ANALOG);
-
-    // Note: Rear distance and smoke sensor removed per pin.md specifications
-    rearDistance = 400.0; // Default value
-    rearSensorValid = false;
-    smokeLevel = 0; // Default value
-}
-
-void validateSensorData()
-{
-    unsigned long now = millis();
-
-    // Check for sensor timeout (no valid reading for 2 seconds)
-    if (now - lastFrontDistanceTime > 2000)
-    {
-        frontSensorValid = false;
-        frontDistance = 400.0;
-    }
-
-    if (now - lastRearDistanceTime > 2000)
-    {
-        rearSensorValid = false;
-        rearDistance = 400.0;
-    }
-}
-
-void checkSafetyConditions()
-{
-    // Enhanced safety with sensor validation
-    bool frontObstacle = frontSensorValid && (frontDistance < EMERGENCY_STOP_DISTANCE);
-    bool gasDanger = gasLevel > GAS_THRESHOLD_ANALOG;
-    bool smokeDanger = smokeLevel > 300;                          // Smoke threshold
-    bool rearObstacle = rearSensorValid && (rearDistance < 15.0); // Rear obstacle detection
-
-    if (!emergencyStop && (frontObstacle || gasDanger || smokeDanger || rearObstacle))
-    {
-        String reason = "";
-        if (frontObstacle)
-        {
-            reason = "Front obstacle: " + String(frontDistance, 1) + "cm";
-        }
-        if (gasDanger)
-        {
-            if (reason.length() > 0)
-                reason += " & ";
-            reason += "Gas critical: " + String(gasLevel);
-        }
-        if (smokeDanger)
-        {
-            if (reason.length() > 0)
-                reason += " & ";
-            reason += "Smoke detected: " + String(smokeLevel);
-            activateSmokeAlarm();
-        }
-        if (rearObstacle)
-        {
-            if (reason.length() > 0)
-                reason += " & ";
-            reason += "Rear obstacle: " + String(rearDistance, 1) + "cm";
-        }
-
-        activateEmergencyStop(reason);
-    }
-}
-
-void updateMotorControl()
-{
-    // Apply target speeds to rear motors with smooth ramping
-    rearLeftSpeed = targetRearLeftSpeed;
-    rearRightSpeed = targetRearRightSpeed;
-
-    // Constrain motor speeds
-    rearLeftSpeed = constrain(rearLeftSpeed, -255, 255);
-    rearRightSpeed = constrain(rearRightSpeed, -255, 255);
-
-    // Update rear motor outputs - L298N Driver per pin.md
-    // Left motor: ENA=GPIO13 (PWM), IN1=GPIO14, IN2=GPIO18
-    if (rearLeftSpeed >= 0)
-    {
-        analogWrite(PIN_MOTOR_1, rearLeftSpeed); // PWM on ENA
-        digitalWrite(PIN_MOTOR_2, HIGH);         // IN1 forward
-        digitalWrite(PIN_MOTOR_3, LOW);          // IN2 forward
-    }
-    else
-    {
-        analogWrite(PIN_MOTOR_1, abs(rearLeftSpeed)); // PWM on ENA
-        digitalWrite(PIN_MOTOR_2, LOW);               // IN1 reverse
-        digitalWrite(PIN_MOTOR_3, HIGH);              // IN2 reverse
-    }
-
-    // Right motor: ENB=GPIO27 (PWM), IN3=GPIO19, IN4=GPIO23
-    if (rearRightSpeed >= 0)
-    {
-        analogWrite(PIN_MOTOR_6, rearRightSpeed); // PWM on ENB
-        digitalWrite(PIN_MOTOR_4, HIGH);          // IN3 forward
-        digitalWrite(PIN_MOTOR_5, LOW);           // IN4 forward
-    }
-    else
-    {
-        analogWrite(PIN_MOTOR_6, abs(rearRightSpeed)); // PWM on ENB
-        digitalWrite(PIN_MOTOR_4, LOW);                // IN3 reverse
-        digitalWrite(PIN_MOTOR_5, HIGH);               // IN4 reverse
-    }
-}
-
-void sendMotorCommandsToFront()
-{
-    // Send motor commands to Front ESP32 via UART
-    JsonDocument motorDoc;
-    motorDoc["L"] = targetFrontLeftSpeed;
-    motorDoc["R"] = targetFrontRightSpeed;
-    motorDoc["CL"] = targetCenterLeftSpeed;  // Center left motor
-    motorDoc["CR"] = targetCenterRightSpeed; // Center right motor
-
-    String motorCommand;
-    serializeJson(motorDoc, motorCommand);
-
-    Serial2.print(motorCommand);
-    Serial2.print("\n");
-}
-
-void handleUARTCommunication()
-{
-    // Check for heartbeat from Front ESP32
-    if (Serial2.available())
-    {
-        String message = Serial2.readStringUntil('\n');
-        message.trim();
-
-        if (message.length() > 0)
-        {
+    webSocketServer.onEvent([](uint8_t num, WStype_t type, uint8_t *payload, size_t length){
+        if(type == WStype_TEXT) {
             JsonDocument doc;
-            DeserializationError error = deserializeJson(doc, message);
+            DeserializationError err = deserializeJson(doc, payload);
+            if(!err && doc["command"].is<const char*>()) processCommand(doc);
+        }
+    });
+}
 
-            if (!error)
-            {
-                const char *msgType = doc["type"] | "";
+void loop() {
+    currentMillis = millis();
+    webSocketServer.loop();
+    handleUART();
 
-                if (strcmp(msgType, "heartbeat") == 0)
-                {
-                    connectionStatus = 2; // Front ESP32 online
-                    lastFrontHeartbeat = millis();
-                    frontLeftSpeed = doc["leftSpeed"] | 0;
-                    frontRightSpeed = doc["rightSpeed"] | 0;
-                }
+    // 1. Motor & Auto Loop (50ms)
+    if (currentMillis - lastMotorUpdate >= 50) {
+        if (autoMode && !emergencyStop) {
+            runAutonomousLogic();
+        }
+        updateMotors();
+        sendToFront();
+        lastMotorUpdate = currentMillis;
+    }
+
+    // 2. Sensor Loop (100ms)
+    if (currentMillis - lastSensorUpdate >= 100) {
+        updateSensors();
+        checkSafety();
+        
+        // Buzzer
+        if (buzzerActive) {
+            if (currentMillis - lastBuzzerUpdate > 200) { 
+                static bool bState = false;
+                bState = !bState;
+                setBuzzer(bState);
+                lastBuzzerUpdate = currentMillis;
             }
+        } else setBuzzer(false);
+
+        if (emergencyStop && (currentMillis - emergencyTimestamp > 5000)) buzzerActive = false;
+        lastSensorUpdate = currentMillis;
+    }
+
+    // 3. Telemetry (200ms)
+    if (currentMillis - lastTelemetryUpdate >= 200) {
+        sendTelemetry();
+        lastTelemetryUpdate = currentMillis;
+    }
+}
+
+// --- NEW AUTONOMOUS LOGIC ---
+void runAutonomousLogic() {
+    // State 0: Driving Forward
+    if (autoState == 0) {
+        if (frontSensorValid && frontDistance < 30.0) {
+            // Obstacle Detected! Switch to Backing Up
+            autoState = 1; 
+            autoTimer = currentMillis;
+            // Stop briefly
+            targetFrontLeft = targetFrontRight = targetRearLeft = targetRearRight = targetCenterLeft = targetCenterRight = 0;
+        } else {
+            // Path Clear -> Drive Forward
+            int speed = 160; 
+            targetFrontLeft = targetFrontRight = targetRearLeft = targetRearRight = targetCenterLeft = targetCenterRight = speed;
+        }
+    }
+    // State 1: Backing Up (for 800ms)
+    else if (autoState == 1) {
+        if (currentMillis - autoTimer > 800) {
+            // Done backing up -> Switch to Turning
+            autoState = 2;
+            autoTimer = currentMillis;
+        } else {
+            int speed = -150;
+            targetFrontLeft = targetFrontRight = targetRearLeft = targetRearRight = targetCenterLeft = targetCenterRight = speed;
+        }
+    }
+    // State 2: Turning Left (for 600ms)
+    else if (autoState == 2) {
+        if (currentMillis - autoTimer > 600) {
+            // Done turning -> Resume Forward
+            autoState = 0;
+        } else {
+            // Tank Turn Left
+            targetFrontLeft = targetCenterLeft = targetRearLeft = -160;
+            targetFrontRight = targetCenterRight = targetRearRight = 160;
         }
     }
 }
 
-void checkFrontESP32Connection()
-{
-    unsigned long now = millis();
-
-    // If no heartbeat for 3 seconds, mark as disconnected
-    if (now - lastFrontHeartbeat > 3000)
-    {
-        if (connectionStatus == 2)
-        {
-            connectionStatus = 1; // Connected but no heartbeat
-            DEBUG_PRINTLN("Front ESP32 heartbeat timeout");
-        }
+void processCommand(const JsonDocument &doc) {
+    String cmd = doc["command"];
+    
+    // If user presses ANY manual button, disable Auto Mode
+    if (cmd != "auto_toggle" && cmd != "emergency") {
+        autoMode = false;
     }
-}
 
-void sendTelemetry()
-{
-    uptime = millis();
-
-    String telemetry = formatTelemetryJSON();
-    webSocketServer.broadcastTXT(telemetry);
-
-    DEBUG_PRINT("Enhanced Telemetry: Front=");
-    DEBUG_PRINT(frontDistance);
-    DEBUG_PRINT("cm, Rear=");
-    DEBUG_PRINT(rearDistance);
-    DEBUG_PRINT("cm, Gas=");
-    DEBUG_PRINT(gasLevel);
-    DEBUG_PRINT(", Smoke=");
-    DEBUG_PRINT(smokeLevel);
-    DEBUG_PRINT(", Front ESP32=");
-    DEBUG_PRINT(connectionStatus == 2 ? "ONLINE" : "OFFLINE");
-    DEBUG_PRINT(", Emergency=");
-    DEBUG_PRINTLN(emergencyStop ? "YES" : "NO");
-}
-
-void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
-{
-    switch (type)
-    {
-    case WStype_CONNECTED:
-        DEBUG_PRINT("WebSocket client ");
-        DEBUG_PRINT(num);
-        DEBUG_PRINTLN(" connected");
-        sendStatusToWebSocket();
-        break;
-
-    case WStype_DISCONNECTED:
-        DEBUG_PRINT("WebSocket client ");
-        DEBUG_PRINT(num);
-        DEBUG_PRINTLN(" disconnected");
-        break;
-
-    case WStype_TEXT:
-        String message = String((char *)payload);
-        DEBUG_PRINT("Message from client ");
-        DEBUG_PRINT(num);
-        DEBUG_PRINT(": ");
-        DEBUG_PRINTLN(message);
-
-        JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, message);
-
-        if (error)
-        {
-            DEBUG_PRINTLN("JSON parse error");
-            return;
-        }
-
-        if (doc["command"].is<const char *>())
-        {
-            processDriveCommand(doc);
-        }
-        break;
-    }
-}
-
-void processDriveCommand(const JsonDocument &doc)
-{
-    String command = doc["command"];
-
-    if (emergencyStop && command != "emergency_reset")
-    {
-        DEBUG_PRINTLN("Command ignored - emergency stop active");
+    if (cmd == "emergency") {
+        emergencyStop = !emergencyStop;
+        autoMode = false; // Kill auto on emergency
+        buzzerActive = emergencyStop;
+        if(emergencyStop) emergencyTimestamp = millis();
         return;
     }
 
-    if (command == "forward")
-    {
-        targetFrontLeftSpeed = 150;
-        targetFrontRightSpeed = 150;
-        targetCenterLeftSpeed = 150;
-        targetCenterRightSpeed = 150;
-        targetRearLeftSpeed = 150;
-        targetRearRightSpeed = 150;
-        DEBUG_PRINTLN("Six-motor command: Forward");
+    if (emergencyStop) return;
+
+    if (cmd == "auto_toggle") {
+        autoMode = !autoMode;
+        autoState = 0; // Reset state
+        if (!autoMode) stopAll();
+        return;
     }
-    else if (command == "backward")
-    {
-        targetFrontLeftSpeed = -150;
-        targetFrontRightSpeed = -150;
-        targetCenterLeftSpeed = -150;
-        targetCenterRightSpeed = -150;
-        targetRearLeftSpeed = -150;
-        targetRearRightSpeed = -150;
-        DEBUG_PRINTLN("Six-motor command: Backward");
+
+    int spd = 180; 
+    if (cmd == "stop") stopAll();
+    else if (cmd == "forward") {
+        targetFrontLeft = targetFrontRight = targetCenterLeft = targetCenterRight = targetRearLeft = targetRearRight = spd;
     }
-    else if (command == "left")
-    {
-        targetFrontLeftSpeed = -100;
-        targetFrontRightSpeed = 100;
-        targetCenterLeftSpeed = -100;
-        targetCenterRightSpeed = 100;
-        targetRearLeftSpeed = -100;
-        targetRearRightSpeed = 100;
-        DEBUG_PRINTLN("Six-motor command: Turn Left");
+    else if (cmd == "backward") {
+        targetFrontLeft = targetFrontRight = targetCenterLeft = targetCenterRight = targetRearLeft = targetRearRight = -spd;
     }
-    else if (command == "right")
-    {
-        targetFrontLeftSpeed = 100;
-        targetFrontRightSpeed = -100;
-        targetCenterLeftSpeed = 100;
-        targetCenterRightSpeed = -100;
-        targetRearLeftSpeed = 100;
-        targetRearRightSpeed = -100;
-        DEBUG_PRINTLN("Six-motor command: Turn Right");
+    else if (cmd == "left") {
+        targetFrontLeft = targetCenterLeft = targetRearLeft = -spd;
+        targetFrontRight = targetCenterRight = targetRearRight = spd;
     }
-    else if (command == "stop")
-    {
-        targetFrontLeftSpeed = 0;
-        targetFrontRightSpeed = 0;
-        targetCenterLeftSpeed = 0;
-        targetCenterRightSpeed = 0;
-        targetRearLeftSpeed = 0;
-        targetRearRightSpeed = 0;
-        DEBUG_PRINTLN("Six-motor command: Stop All");
-    }
-    else if (command == "emergency")
-    {
-        activateEmergencyStop("Manual emergency stop");
-    }
-    else if (command == "emergency_reset")
-    {
-        deactivateEmergencyStop();
-    }
-    else if (command == "test_front")
-    {
-        // Test front motors only
-        targetFrontLeftSpeed = 100;
-        targetFrontRightSpeed = 100;
-        targetCenterLeftSpeed = 100;
-        targetCenterRightSpeed = 100;
-        DEBUG_PRINTLN("Testing front motors (1-4)");
-    }
-    else if (command == "test_rear")
-    {
-        // Test rear motors only
-        targetRearLeftSpeed = 100;
-        targetRearRightSpeed = 100;
-        DEBUG_PRINTLN("Testing rear motors (5-6)");
-    }
-    else if (command == "test_all")
-    {
-        // Test all motors
-        targetFrontLeftSpeed = 100;
-        targetFrontRightSpeed = 100;
-        targetCenterLeftSpeed = 100;
-        targetCenterRightSpeed = 100;
-        targetRearLeftSpeed = 100;
-        targetRearRightSpeed = 100;
-        DEBUG_PRINTLN("Testing all six motors");
+    else if (cmd == "right") {
+        targetFrontLeft = targetCenterLeft = targetRearLeft = spd;
+        targetFrontRight = targetCenterRight = targetRearRight = -spd;
     }
 }
 
-void activateEmergencyStop(const String &reason)
-{
-    if (!emergencyStop)
-    {
+void stopAll() {
+    targetFrontLeft = targetFrontRight = targetCenterLeft = targetCenterRight = targetRearLeft = targetRearRight = 0;
+}
+
+// --- STANDARD FUNCTIONS ---
+void addCors(AsyncWebServerResponse *response) {
+    response->addHeader("Access-Control-Allow-Origin", "*");
+    response->addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    response->addHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+void updateSensors() {
+    digitalWrite(PIN_US_TRIG, LOW); delayMicroseconds(2);
+    digitalWrite(PIN_US_TRIG, HIGH); delayMicroseconds(10);
+    digitalWrite(PIN_US_TRIG, LOW);
+    
+    long duration = pulseIn(PIN_US_ECHO, HIGH, 23500); 
+    if (duration > 0) {
+        frontDistance = duration * 0.034 / 2;
+        frontSensorValid = true;
+    } else {
+        frontDistance = 400.0;
+        frontSensorValid = false;
+    }
+    gasLevel = analogRead(PIN_GAS_ANALOG);
+}
+
+void checkSafety() {
+    // In Auto Mode, safety is handled by the state machine (distance check)
+    // But we still need emergency stops for extreme close range or gas
+    bool criticalObstacle = frontSensorValid && (frontDistance < 10.0); // 10cm HARD STOP
+    bool gasDanger = gasLevel > 2000; 
+
+    if (!emergencyStop && (criticalObstacle || gasDanger)) {
         emergencyStop = true;
+        autoMode = false; // Kill auto
         emergencyTimestamp = millis();
-
-        // Stop all motors
-        targetFrontLeftSpeed = 0;
-        targetFrontRightSpeed = 0;
-        targetCenterLeftSpeed = 0;
-        targetCenterRightSpeed = 0;
-        targetRearLeftSpeed = 0;
-        targetRearRightSpeed = 0;
-
-        // Immediately stop rear motors
-        stopAllRearMotors();
-
-        // Sound buzzer
-        soundBuzzer(500);
-
-        DEBUG_PRINTLN("🚨 SIX-MOTOR EMERGENCY STOP ACTIVATED!");
-        DEBUG_PRINT("Reason: ");
-        DEBUG_PRINTLN(reason);
+        buzzerActive = true;
+        stopAll();
     }
 }
 
-void deactivateEmergencyStop()
-{
-    if (emergencyStop)
-    {
-        emergencyStop = false;
-        emergencyTimestamp = 0;
-        buzzerActive = false;
-        alarmActive = false;
-
-        DEBUG_PRINTLN("Emergency stop reset - six-motor system resumed");
+void setBuzzer(bool state) {
+    if (state) {
+        pinMode(PIN_GAS_DIGITAL, OUTPUT); digitalWrite(PIN_GAS_DIGITAL, HIGH);
+    } else {
+        digitalWrite(PIN_GAS_DIGITAL, LOW); pinMode(PIN_GAS_DIGITAL, INPUT); 
     }
 }
 
-void soundBuzzer(int duration)
-{
-    buzzerActive = true;
-    lastBuzzerUpdate = millis();
-}
+void updateMotors() {
+    currentRearLeft = targetRearLeft;
+    currentRearRight = targetRearRight;
 
-void updateBuzzer()
-{
-    unsigned long now = millis();
+    if (currentRearLeft >= 0) {
+        analogWrite(PIN_MOTOR_1, currentRearLeft);
+        digitalWrite(PIN_MOTOR_2, HIGH); digitalWrite(PIN_MOTOR_3, LOW);
+    } else {
+        analogWrite(PIN_MOTOR_1, abs(currentRearLeft));
+        digitalWrite(PIN_MOTOR_2, LOW); digitalWrite(PIN_MOTOR_3, HIGH);
+    }
 
-    if (buzzerActive)
-    {
-        // Toggle buzzer every 200ms for emergency alert
-        if (now - lastBuzzerUpdate >= 200)
-        {
-            static bool buzzerState = false;
-            buzzerState = !buzzerState;
-            digitalWrite(PIN_GAS_DIGITAL, buzzerState); // Use GPIO33 for buzzer
-            lastBuzzerUpdate = now;
-        }
-
-        // Stop buzzer after 5 seconds
-        if (now - emergencyTimestamp >= 5000)
-        {
-            buzzerActive = false;
-            digitalWrite(PIN_GAS_DIGITAL, LOW);
-        }
+    if (currentRearRight >= 0) {
+        analogWrite(PIN_MOTOR_6, currentRearRight);
+        digitalWrite(PIN_MOTOR_5, HIGH); digitalWrite(PIN_MOTOR_4, LOW);
+    } else {
+        analogWrite(PIN_MOTOR_6, abs(currentRearRight));
+        digitalWrite(PIN_MOTOR_5, LOW); digitalWrite(PIN_MOTOR_4, HIGH);
     }
 }
 
-void activateSmokeAlarm()
-{
-    if (!alarmActive)
-    {
-        alarmActive = true;
-        DEBUG_PRINTLN("🚨 SMOKE ALARM ACTIVATED!");
-    }
-}
-
-void updateSmokeAlarm()
-{
-    if (alarmActive && smokeLevel < 200)
-    {
-        alarmActive = false;
-        DEBUG_PRINTLN("Smoke alarm cleared");
-    }
-}
-
-void sendStatusToWebSocket()
-{
-    String status = formatStatusJSON();
-    webSocketServer.broadcastTXT(status);
-}
-
-String formatTelemetryJSON()
-{
+void sendToFront() {
     JsonDocument doc;
-    doc["type"] = "telemetry";
-    doc["timestamp"] = millis();
-    doc["dist"] = frontDistance;
-    doc["rearDist"] = rearDistance;
-    doc["gas"] = gasLevel;
-    doc["smoke"] = smokeLevel;
-    doc["battery"] = batteryVoltage;
-    doc["uptime"] = uptime;
-    doc["emergency"] = emergencyStop;
-    doc["frontOnline"] = (connectionStatus == 2);
-    doc["motorsActive"] = (frontLeftSpeed != 0 || frontRightSpeed != 0 || rearLeftSpeed != 0 || rearRightSpeed != 0);
-    doc["frontSensorValid"] = frontSensorValid;
-    doc["rearSensorValid"] = rearSensorValid;
-
-    String json;
-    serializeJson(doc, json);
-    return json;
+    doc["L"] = targetFrontLeft; doc["R"] = targetFrontRight;
+    doc["CL"] = targetCenterLeft; doc["CR"] = targetCenterRight;
+    String out; serializeJson(doc, out); Serial2.println(out);
 }
 
-String formatStatusJSON()
-{
-    JsonDocument doc;
-    doc["type"] = "status";
-    doc["status"] = emergencyStop ? "emergency" : "normal";
-    doc["ready"] = systemReady;
-    doc["sixMotors"] = true;
-    doc["frontOnline"] = (connectionStatus == 2);
+void handleUART() {
+    while (Serial2.available()) {
+        String msg = Serial2.readStringUntil('\n');
+        if (msg.indexOf("heartbeat") >= 0) { lastFrontHeartbeat = millis(); connectionStatus = 2; }
+    }
+    if (millis() - lastFrontHeartbeat > 3000) connectionStatus = 1; 
+}
 
-    String json;
-    serializeJson(doc, json);
-    return json;
+void sendTelemetry() {
+    char buffer[150];
+    snprintf(buffer, sizeof(buffer), 
+        "{\"d\":%.1f,\"g\":%d,\"v\":%.1f,\"e\":%s,\"fo\":%s,\"auto\":%s}",
+        frontDistance, gasLevel, batteryVoltage, 
+        emergencyStop ? "true" : "false", 
+        (connectionStatus==2) ? "true" : "false",
+        autoMode ? "true" : "false"
+    );
+    webSocketServer.broadcastTXT(buffer);
 }
