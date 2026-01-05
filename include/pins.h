@@ -126,10 +126,8 @@
 // ===== UART COMMUNICATION PINS (Slave-to-Master) =====
 // Wiring: Cross-connect TX/RX with Rear ESP32
 // Communication: 115200 baud, JSON protocol, Serial2 (GPIO16/17 hardware)
-// ⚠️ NOTE: Code uses Serial2.begin() which defaults to GPIO16(RX)/GPIO17(TX)
-// These definitions may not match actual hardware Serial2 pins!
-#define PIN_UART_RX 22 // UART RX from Rear ESP32 (if using software serial)
-#define PIN_UART_TX 23 // UART TX to Rear ESP32 (if using software serial)
+// ⚠️ NOTE: Hardware Serial2 uses GPIO16(RX2), GPIO17(TX2) - cannot be remapped
+// These are defined in platformio.ini build flags to avoid conflicts
 // Hardware Serial2 uses: GPIO16(RX2), GPIO17(TX2) - cannot be remapped on ESP32
 
 // ===== EXCLUDED PINS (Bootstrap/Flash/Reserved) =====
@@ -235,8 +233,8 @@
  * - Ultrasonic (HC-SR04): GPIO4 (Trig), GPIO36 (Echo with voltage divider)
  *
  * COMMUNICATION:
- * - UART Master-Slave: GPIO22 (TX), GPIO21 (RX) between rear-front ESP32
- * - UART Master-Camera: GPIO1 (TX), GPIO3 (RX) between rear-ESP32-CAM
+ * - UART Master-Slave: GPIO17 (TX2), GPIO16 (RX2) between rear-front ESP32
+ * - UART Master-Camera: GPIO1 (TX0), GPIO3 (RX0) between rear-ESP32-CAM
  *
  * STATUS/INDICATORS:
  * - Buzzer: GPIO33 (rear ESP32)
