@@ -1,1081 +1,286 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  Camera,
-  Radio,
-  Gauge,
-  Battery,
-  AlertTriangle,
-  Wind,
-  Power,
-  Activity,
-  Wifi,
-  WifiOff,
-  Circle,
-  ArrowUp,
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  RotateCw,
-  StopCircle,
-  Cpu,
-  Eye,
-  Zap,
-  Clock,
-  Signal,
-  Settings,
-  Maximize2,
-  BarChart3,
-  Info,
-  AlertCircle
+  Camera, Radio, Gauge, Battery, AlertTriangle, Wind,
+  Wifi, WifiOff, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
+  StopCircle, Eye, Zap, Signal, Settings, Maximize2, AlertCircle,
+  Bot, Clock, Volume2, VolumeX, Keyboard
 } from 'lucide-react';
 
-// Import new components
+// --- FIXED IMPORTS (Relative to src/components/) ---
 import { DashboardLoader } from './components/LoadingSkeleton';
 import TelemetryChart, { useTelemetryHistory } from './components/TelemetryChart';
 import SettingsPanel from './components/SettingsPanel';
+import SystemHealthPanel from './components/SystemHealthPanel';
 import FullscreenVideo from './components/FullscreenVideo';
 import DataExportPanel from './components/DataExportPanel';
-import Tooltip from './components/Tooltip';
 
-// Enhanced Mission Control Dashboard for Project Nightfall Rescue Robot
-// Features: Real WebSocket client, Manual control, Performance monitoring, Error handling
+const WEBSOCKET_URL = 'ws://192.168.4.1:8888';
+const ConnectionStates = { DISCONNECTED: 'disconnected', CONNECTING: 'connecting', CONNECTED: 'connected', ERROR: 'error' };
+const SystemStatus = { HEALTHY: 'healthy', WARNING: 'warning', CRITICAL: 'critical', OFFLINE: 'offline' };
 
-// WebSocket connection states
-const ConnectionStates = {
-  DISCONNECTED: 'disconnected',
-  CONNECTING: 'connecting', 
-  CONNECTED: 'connected',
-  RECONNECTING: 'reconnecting',
-  ERROR: 'error'
-};
+// --- LOCAL UTILITIES ---
+function Tooltip({ children, content, position = 'bottom' }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative" onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+      {children}
+      {show && (
+        <div className={`absolute ${position === 'bottom' ? 'top-full mt-2' : 'bottom-full mb-2'} left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50 animate-fade-in shadow-lg border border-gray-700`}>{content}</div>
+      )}
+    </div>
+  );
+}
 
-// Robot system status types
-const SystemStatus = {
-  HEALTHY: 'healthy',
-  WARNING: 'warning',
-  CRITICAL: 'critical',
-  OFFLINE: 'offline'
-};
+function KeyboardShortcuts({ onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 animate-fade-in" onClick={onClose}>
+      <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 max-w-md w-full mx-4 animate-slide-up shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-bold flex items-center gap-2"><Keyboard className="w-5 h-5 text-purple-400" /> Keyboard Shortcuts</h3>
+          <button onClick={onClose} className="p-1 hover:bg-gray-700 rounded-lg transition-colors text-gray-400 hover:text-white">✕</button>
+        </div>
+        <div className="space-y-2 text-sm">
+          {[{ key: 'W', action: 'Move Forward' }, { key: 'S', action: 'Move Backward' }, { key: 'A', action: 'Turn Left' }, { key: 'D', action: 'Turn Right' }, { key: 'Space', action: 'Stop' }, { key: 'Esc', action: 'Emergency Stop' }, { key: '?', action: 'Show Help' }].map(({ key, action }) => (
+            <div key={key} className="flex justify-between items-center py-2 border-b border-gray-700/50 last:border-0"><span className="text-gray-300">{action}</span><kbd className="px-2 py-1 bg-gray-700 rounded text-white font-mono text-xs border border-gray-600 shadow-sm">{key}</kbd></div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
+// --- MAIN DASHBOARD ---
 export default function DashboardEnhanced() {
-  // --- State for new features ---
   const [isLoading, setIsLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [showFullscreenVideo, setShowFullscreenVideo] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  
   const [settings, setSettings] = useState(() => {
     const saved = localStorage.getItem('dashboard-settings');
-    return saved ? JSON.parse(saved) : {
-      theme: 'dark',
-      enableSounds: false,
-      autoReconnect: true,
-      showNotifications: true,
-      videoQuality: 'high',
-      dataRefreshRate: 100,
-      commandThrottle: 50,
-      maxTelemetryHistory: 50
-    };
+    return saved ? JSON.parse(saved) : { theme: 'dark', maxTelemetryHistory: 50 };
   });
 
-  // --- Telemetry history for charts ---
-  const {
-    batteryHistory,
-    gasHistory,
-    distanceHistory,
-    signalHistory,
-    addTelemetryPoint,
-    clearHistory
-  } = useTelemetryHistory(settings.maxTelemetryHistory);
-
-  // --- WebSocket connection management ---
+  const { batteryHistory, gasHistory, distanceHistory, signalHistory, addTelemetryPoint } = useTelemetryHistory(settings.maxTelemetryHistory);
   const [connectionState, setConnectionState] = useState(ConnectionStates.DISCONNECTED);
-  const [lastError, setLastError] = useState(null);
-  const [reconnectAttempts, setReconnectAttempts] = useState(0);
-  const reconnectAttemptsRef = useRef(0);
-  const [connectionStats, setConnectionStats] = useState({
-    messagesSent: 0,
-    messagesReceived: 0,
-    lastMessageTime: null,
-    averageLatency: 0
-  });
+  const [connectionStats, setConnectionStats] = useState({ messagesReceived: 0, messagesSent: 0 });
 
-  // --- Real-time telemetry data ---
   const [telemetry, setTelemetry] = useState({
-    back_status: 'offline',
-    front_status: false,
-    camera_status: false,
-    dist: 0,
-    gas: 0,
-    cam_ip: '192.168.4.1/stream',
-    battery: 11.1,
-    signal_strength: 0,
-    uptime: 0
+    back_status: 'offline', front_status: false, camera_status: false,
+    dist: 0, gas: 0, cam_ip: null, battery: 11.1, signal_strength: 0,
+    uptime: 0, emergency: false, auto_mode: false
   });
 
-  // --- System health monitoring ---
-  const [systemHealth, setSystemHealth] = useState({
-    brain: SystemStatus.OFFLINE,    // Back ESP32
-    motors: SystemStatus.OFFLINE,   // Front ESP32 UART
-    vision: SystemStatus.OFFLINE    // Camera ESP32
-  });
-
-  // --- Motor control state ---
-  const [motorState, setMotorState] = useState({ left: 0, right: 0 });
-  const [lastCommand, setLastCommand] = useState(null);
-
-  // --- Performance monitoring ---
-  const [performanceMetrics, setPerformanceMetrics] = useState({
-    fps: 0,
-    videoLatency: 0,
-    commandSuccessRate: 100,
-    dataRate: 0,
-    memoryUsage: 0
-  });
-
-  // --- Alerts and notifications ---
+  const [systemHealth, setSystemHealth] = useState({ brain: SystemStatus.OFFLINE, motors: SystemStatus.OFFLINE, vision: SystemStatus.OFFLINE });
+  const [performanceMetrics, setPerformanceMetrics] = useState({ dataRate: 0, commandSuccessRate: 100, fps: 0 });
   const [alerts, setAlerts] = useState([]);
   const [videoFps, setVideoFps] = useState(0);
 
-  // --- WebSocket ref for direct communication ---
   const wsRef = useRef(null);
-  const commandTimeoutRef = useRef(null);
-  const reconnectTimeoutRef = useRef(null);
-  const pingIntervalRef = useRef(null);
   const fpsCounterRef = useRef({ frames: 0, lastTime: Date.now() });
-  const isConnectingRef = useRef(false);
-
-  // --- Constants ---
-  const WEBSOCKET_URL = 'ws://192.168.4.1:8888';
-  const RECONNECT_DELAYS = [2000, 4000, 8000, 16000]; // Exponential backoff
-  const COMMAND_THROTTLE = 50; // Minimum ms between commands
-
-  // --- Safe telemetry access helper ---
-  const getSafeTelemetry = useCallback((telemetryData, fallback = {}) => {
-    if (!telemetryData || typeof telemetryData !== 'object') {
-      return fallback;
-    }
-    return {
-      back_status: telemetryData.back_status || 'offline',
-      front_status: telemetryData.front_status || false,
-      camera_status: telemetryData.camera_status || false,
-      dist: telemetryData.dist || 0,
-      gas: telemetryData.gas || 0,
-      cam_ip: telemetryData.cam_ip || '192.168.4.3',
-      battery: telemetryData.battery || 14.8,
-      signal_strength: telemetryData.signal_strength || 0,
-      uptime: telemetryData.uptime || 0,
-      ...fallback,
-      ...telemetryData
-    };
-  }, []);
-
-  // --- Utility functions ---
-  const addAlert = useCallback((message, type = 'info', duration = 5000) => {
-    const alert = {
-      id: Date.now() + Math.random(),
-      message,
-      type,
-      timestamp: new Date()
-    };
-    
-    setAlerts(prev => [alert, ...prev].slice(0, 10));
-    
-    if (duration > 0) {
-      setTimeout(() => {
-        setAlerts(prev => prev.filter(a => a.id !== alert.id));
-      }, duration);
-    }
-  }, []);
-
-  const updateSystemHealth = useCallback((newTelemetry) => {
-    setSystemHealth({
-      brain: newTelemetry.back_status === 'ok' ? SystemStatus.HEALTHY : SystemStatus.CRITICAL,
-      motors: newTelemetry.front_status ? SystemStatus.HEALTHY : SystemStatus.CRITICAL,
-      vision: newTelemetry.camera_status ? SystemStatus.HEALTHY : SystemStatus.OFFLINE
-    });
-  }, []);
-
-  // --- WebSocket connection management ---
-  const connectWebSocket = useCallback(() => {
-    // Prevent multiple simultaneous connection attempts
-    if (isConnectingRef.current || wsRef.current?.readyState === WebSocket.OPEN) {
-      return;
-    }
-
-    isConnectingRef.current = true;
-    
+  const lastCommandTimeRef = useRef(0);
+  const commandFeedbackRef = useRef(null);
+  
+  const playSound = useCallback((type) => {
+    if (!soundEnabled) return;
     try {
-      console.log('[DEBUG] Attempting to connect to:', WEBSOCKET_URL);
-      setConnectionState(ConnectionStates.CONNECTING);
-      setLastError(null);
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      const now = ctx.currentTime;
+      if (type === 'move') { osc.frequency.setValueAtTime(600, now); osc.frequency.exponentialRampToValueAtTime(300, now + 0.1); gain.gain.setValueAtTime(0.05, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1); osc.start(now); osc.stop(now + 0.1); }
+      else if (type === 'stop') { osc.frequency.setValueAtTime(200, now); osc.frequency.exponentialRampToValueAtTime(100, now + 0.15); gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15); osc.start(now); osc.stop(now + 0.15); }
+      else if (type === 'alert') { osc.type = 'square'; osc.frequency.setValueAtTime(800, now); osc.frequency.setValueAtTime(0, now + 0.1); osc.frequency.setValueAtTime(800, now + 0.2); gain.gain.setValueAtTime(0.1, now); osc.start(now); osc.stop(now + 0.3); }
+    } catch (e) { console.warn("Audio error", e); }
+  }, [soundEnabled]);
 
+  const addAlert = useCallback((message, type = 'info') => {
+    const alert = { id: Date.now() + Math.random(), message, type, timestamp: new Date() };
+    setAlerts(prev => [alert, ...prev].slice(0, 10));
+    if (type === 'error') playSound('alert');
+    setTimeout(() => setAlerts(prev => prev.filter(a => a.id !== alert.id)), 5000);
+  }, [playSound]);
+
+  const showCommandFeedback = useCallback((command) => {
+    if (commandFeedbackRef.current) {
+      commandFeedbackRef.current.textContent = command.replace('_', ' ').toUpperCase();
+      commandFeedbackRef.current.style.opacity = '1';
+      setTimeout(() => { if(commandFeedbackRef.current) commandFeedbackRef.current.style.opacity = '0'; }, 500);
+    }
+  }, []);
+
+  useEffect(() => {
+    setTimeout(() => setIsLoading(false), 1500);
+    const connect = () => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) return;
+      setConnectionState(ConnectionStates.CONNECTING);
       const ws = new WebSocket(WEBSOCKET_URL);
       wsRef.current = ws;
-
-      ws.onopen = () => {
-        console.log('[DEBUG] WebSocket connected successfully');
-        isConnectingRef.current = false;
-        setConnectionState(ConnectionStates.CONNECTED);
-        setReconnectAttempts(0);
-        reconnectAttemptsRef.current = 0;
-        addAlert('Connected to robot successfully', 'success');
-        
-        // Start ping interval for latency measurement
-        pingIntervalRef.current = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            const pingTime = Date.now();
-            ws.send(JSON.stringify({ type: 'ping', timestamp: pingTime }));
-          }
-        }, 5000);
-      };
-
+      ws.onopen = () => { setConnectionState(ConnectionStates.CONNECTED); addAlert('Connected to Robot Brain', 'success'); };
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          const now = Date.now();
-          
-          setConnectionStats(prev => ({
-            ...prev,
-            messagesReceived: prev.messagesReceived + 1,
-            lastMessageTime: now
-          }));
-
-          if (data.type === 'pong') {
-            const latency = now - data.timestamp;
-            setConnectionStats(prev => ({
-              ...prev,
-              averageLatency: Math.round((prev.averageLatency + latency) / 2)
-            }));
-            return;
+          setConnectionStats(prev => ({ ...prev, messagesReceived: prev.messagesReceived + 1 }));
+          if (data.type === 'cam_telemetry') { setTelemetry(prev => ({ ...prev, cam_ip: data.ip, signal_strength: data.rssi, camera_status: true })); setSystemHealth(prev => ({...prev, vision: SystemStatus.HEALTHY})); } 
+          else if (data.d !== undefined) {
+            setTelemetry(prev => {
+              const newData = { ...prev, dist: data.d, gas: data.g, battery: data.v, emergency: data.e, front_status: data.fo, back_status: 'ok', auto_mode: data.auto, uptime: prev.uptime + 0.5 };
+              addTelemetryPoint(newData); return newData;
+            });
+            setSystemHealth(prev => ({ ...prev, brain: SystemStatus.HEALTHY, motors: data.fo ? SystemStatus.HEALTHY : SystemStatus.CRITICAL }));
+            if (data.e) addAlert("EMERGENCY STOP ACTIVE", 'error');
           }
-
-          if (data.type === 'telemetry') {
-            const safeTelemetry = getSafeTelemetry(data.payload);
-            setTelemetry(safeTelemetry);
-            updateSystemHealth(safeTelemetry);
-            addTelemetryPoint(safeTelemetry); // Add to history for charts
-            
-            // Update performance metrics
-            setPerformanceMetrics(prev => ({
-              ...prev,
-              dataRate: prev.dataRate + JSON.stringify(data).length
-            }));
-          }
-
-        } catch (error) {
-          console.error('Failed to parse WebSocket message:', error);
-          addAlert('Invalid data received from robot', 'warning');
-        }
+        } catch (e) { console.error("Parse Error", e); }
       };
+      ws.onclose = () => { setConnectionState(ConnectionStates.DISCONNECTED); setSystemHealth({ brain: SystemStatus.OFFLINE, motors: SystemStatus.OFFLINE, vision: SystemStatus.OFFLINE }); setTimeout(connect, 3000); };
+      ws.onerror = () => { setConnectionState(ConnectionStates.ERROR); ws.close(); };
+    };
+    connect();
+    return () => { if (wsRef.current) wsRef.current.close(); };
+  }, [addAlert, addTelemetryPoint]);
 
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        setConnectionState(ConnectionStates.ERROR);
-        setLastError('Connection error');
-        addAlert('WebSocket connection error', 'error');
-      };
-
-      ws.onclose = (event) => {
-        console.log('[DEBUG] WebSocket closed:', event.code, event.reason);
-        isConnectingRef.current = false;
-        setConnectionState(ConnectionStates.DISCONNECTED);
-        
-        // Clear intervals
-        if (pingIntervalRef.current) {
-          clearInterval(pingIntervalRef.current);
-          pingIntervalRef.current = null;
-        }
-
-        // Auto-reconnect with exponential backoff
-        if (reconnectAttemptsRef.current < RECONNECT_DELAYS.length) {
-          setConnectionState(ConnectionStates.RECONNECTING);
-          const delay = RECONNECT_DELAYS[reconnectAttemptsRef.current];
-          
-          addAlert(`Reconnecting in ${delay/1000}s... (attempt ${reconnectAttemptsRef.current + 1}/4)`, 'warning', delay);
-          
-          reconnectTimeoutRef.current = setTimeout(() => {
-            reconnectAttemptsRef.current += 1;
-            setReconnectAttempts(reconnectAttemptsRef.current);
-            connectWebSocket();
-          }, delay);
-        } else {
-          addAlert('Failed to reconnect to robot. Please check if robot is powered on and WebSocket server is running.', 'error');
-        }
-      };
-
-    } catch (error) {
-      console.error('[DEBUG] Failed to create WebSocket:', error);
-      isConnectingRef.current = false;
-      setConnectionState(ConnectionStates.ERROR);
-      setLastError(error.message);
-      addAlert('Failed to establish connection. Is the robot powered on?', 'error');
-    }
-  }, [addAlert, updateSystemHealth]);
-
-  // --- Command transmission ---
-  const sendMotorCommand = useCallback((left, right) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      addAlert('Cannot send command: Not connected to robot', 'error');
-      return false;
-    }
-
-    // Command throttling
+  const sendCommand = (cmdString) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     const now = Date.now();
-    if (lastCommand && now - lastCommand.timestamp < COMMAND_THROTTLE) {
-      return false;
-    }
+    if (now - lastCommandTimeRef.current < 50) return;
+    wsRef.current.send(JSON.stringify({ command: cmdString }));
+    lastCommandTimeRef.current = now;
+    setConnectionStats(prev => ({ ...prev, messagesSent: prev.messagesSent + 1 }));
+    showCommandFeedback(cmdString);
+    if(cmdString !== 'auto_toggle') playSound(cmdString === 'stop' ? 'stop' : 'move');
+  };
 
-    const command = { L: left, R: right };
-    
-    try {
-      wsRef.current.send(JSON.stringify(command));
-      
-      setMotorState({ left, right });
-      setLastCommand({ command, timestamp: now });
-      setConnectionStats(prev => ({
-        ...prev,
-        messagesSent: prev.messagesSent + 1
-      }));
+  const toggleAuto = () => sendCommand('auto_toggle');
+  const moveForward = () => sendCommand('forward');
+  const moveBackward = () => sendCommand('backward');
+  const turnLeft = () => sendCommand('left');
+  const turnRight = () => sendCommand('right');
+  const stopRobot = () => sendCommand('stop');
+  const emergencyStop = () => sendCommand('emergency');
 
-      return true;
-    } catch (error) {
-      console.error('Failed to send command:', error);
-      addAlert('Failed to send motor command', 'error');
-      return false;
-    }
-  }, [addAlert, lastCommand]);
-
-  // --- Movement commands ---
-  const moveForward = useCallback(() => sendMotorCommand(200, 200), [sendMotorCommand]);
-  const moveBackward = useCallback(() => sendMotorCommand(-150, -150), [sendMotorCommand]);
-  const turnLeft = useCallback(() => sendMotorCommand(-100, 100), [sendMotorCommand]);
-  const turnRight = useCallback(() => sendMotorCommand(100, -100), [sendMotorCommand]);
-  const rotateClockwise = useCallback(() => sendMotorCommand(140, -140), [sendMotorCommand]);
-  const emergencyStop = useCallback(() => {
-    sendMotorCommand(0, 0);
-    addAlert('EMERGENCY STOP ACTIVATED', 'error', 0);
-  }, [sendMotorCommand, addAlert]);
-
-  // --- Keyboard controls ---
   useEffect(() => {
-    const handleKeyPress = (event) => {
-      switch (event.key.toLowerCase()) {
-        case 'w':
-        case 'arrowup':
-          event.preventDefault();
-          moveForward();
-          break;
-        case 's':
-        case 'arrowdown':
-          event.preventDefault();
-          moveBackward();
-          break;
-        case 'a':
-        case 'arrowleft':
-          event.preventDefault();
-          turnLeft();
-          break;
-        case 'd':
-        case 'arrowright':
-          event.preventDefault();
-          turnRight();
-          break;
-        case ' ':
-        case 'escape':
-          event.preventDefault();
-          emergencyStop();
-          break;
-        case 'r':
-          if (event.ctrlKey) {
-            event.preventDefault();
-            rotateClockwise();
-          }
-          break;
+    const handleKeyDown = (e) => {
+      if(e.repeat) return;
+      switch(e.key.toLowerCase()) {
+        case 'w': moveForward(); break; case 's': moveBackward(); break; case 'a': turnLeft(); break; case 'd': turnRight(); break; case ' ': stopRobot(); break; case 'escape': emergencyStop(); break; case '?': setShowShortcuts(true); break; default: break;
       }
     };
+    const handleKeyUp = (e) => { if(['w','a','s','d'].includes(e.key.toLowerCase())) stopRobot(); };
+    window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp);
+    return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
+  }, []);
 
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [moveForward, moveBackward, turnLeft, turnRight, emergencyStop, rotateClockwise]);
-
-  // --- Connection lifecycle ---
-  useEffect(() => {
-    // Simulate initial loading
-    setTimeout(() => setIsLoading(false), 1000);
-    
-    connectWebSocket();
-
-    return () => {
-      // Cleanup on unmount
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (pingIntervalRef.current) {
-        clearInterval(pingIntervalRef.current);
-      }
-    };
-  }, [connectWebSocket]);
-
-  // --- FPS counter for video ---
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();
-      const counter = fpsCounterRef.current;
-      const deltaTime = now - counter.lastTime;
-      
-      if (deltaTime >= 1000) {
-        setVideoFps(counter.frames);
-        counter.frames = 0;
-        counter.lastTime = now;
-      }
-    }, 100);
-
+      if (now - fpsCounterRef.current.lastTime >= 1000) { setVideoFps(fpsCounterRef.current.frames); fpsCounterRef.current.frames = 0; fpsCounterRef.current.lastTime = now; }
+    }, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // --- Performance monitoring update ---
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setPerformanceMetrics(prev => ({
-        ...prev,
-        dataRate: Math.round(prev.dataRate / 1024), // Convert to KB/s
-        fps: videoFps
-      }));
-    }, 2000);
+  const formatUptime = (seconds) => { const hrs = Math.floor(seconds / 3600); const mins = Math.floor((seconds % 3600) / 60); return `${hrs}h ${mins}m`; };
+  const getConnectionQuality = (signal) => { if (signal >= -50) return 4; if (signal >= -60) return 3; if (signal >= -70) return 2; return 1; };
 
-    return () => clearInterval(interval);
-  }, [videoFps]);
-
-  // --- Connection status helpers ---
-  const getConnectionStatusDisplay = () => {
-    switch (connectionState) {
-      case ConnectionStates.CONNECTED:
-        return { icon: Wifi, text: 'Connected', className: 'status-connected' };
-      case ConnectionStates.CONNECTING:
-        return { icon: Radio, text: 'Connecting...', className: 'status-reconnecting' };
-      case ConnectionStates.RECONNECTING:
-        return { icon: Radio, text: `Reconnecting (${reconnectAttempts + 1}/4)`, className: 'status-reconnecting' };
-      case ConnectionStates.ERROR:
-        return { icon: AlertTriangle, text: 'Error', className: 'status-disconnected' };
-      default:
-        return { icon: WifiOff, text: 'Disconnected', className: 'status-disconnected' };
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case SystemStatus.HEALTHY: return 'robot-status-brain';
-      case SystemStatus.WARNING: return 'connection-warning';
-      case SystemStatus.CRITICAL: return 'connection-error';
-      default: return 'connection-error opacity-50';
-    }
-  };
-
-  const getDistanceColor = (distance) => {
-    if (distance < 20) return 'text-red-400';
-    if (distance < 50) return 'text-yellow-400';
-    return 'text-green-400';
-  };
-
-  const getGasColor = (gas) => {
-    if (gas > 3000) return 'text-red-400 animate-pulse';
-    if (gas > 1500) return 'text-yellow-400';
-    return 'text-green-400';
-  };
-
-  const getBatteryColor = (voltage) => {
-    const percentage = Math.max(0, Math.min((voltage - 11) / (14.8 - 11) * 100, 100));
-    if (percentage > 50) return 'text-green-400';
-    if (percentage > 25) return 'text-yellow-400';
-    return 'text-red-400';
-  };
-
-  const connectionStatus = getConnectionStatusDisplay();
-  const StatusIcon = connectionStatus.icon;
-
-  // Show loading state
-  if (isLoading) {
-    return <DashboardLoader />;
-  }
+  if (isLoading) return <DashboardLoader />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-nightfall-primary via-nightfall-secondary to-nightfall-primary text-white">
-      {/* Connection Status Banner */}
-      {connectionState !== ConnectionStates.CONNECTED && (
-        <div className={`p-4 text-center ${
-          connectionState === ConnectionStates.ERROR 
-            ? 'bg-red-600/20 border-b border-red-600/30' 
-            : 'bg-yellow-600/20 border-b border-yellow-600/30'
-        }`}>
-          <div className="flex items-center justify-center gap-2">
-            <AlertTriangle className="w-5 h-5" />
-            <span className="font-medium">
-              {connectionState === ConnectionStates.ERROR 
-                ? 'Robot Connection Failed' 
-                : connectionState === ConnectionStates.RECONNECTING
-                ? 'Attempting to reconnect...'
-                : 'Waiting for robot connection'
-              }
-            </span>
-            <span className="text-sm opacity-75">
-              ({reconnectAttemptsRef.current}/4 attempts)
-            </span>
-          </div>
-          <div className="text-sm mt-1 opacity-75">
-            Ensure robot is powered on and WebSocket server is running on {WEBSOCKET_URL}
-          </div>
-        </div>
-      )}
-      
-      {/* Settings Panel */}
-      <SettingsPanel
-        isOpen={showSettings}
-        onClose={() => setShowSettings(false)}
-        settings={settings}
-        onSettingsChange={(newSettings) => {
-          setSettings(newSettings);
-          localStorage.setItem('dashboard-settings', JSON.stringify(newSettings));
-        }}
-      />
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-900 to-black text-white p-4 sm:p-6 font-sans animate-fade-in">
+      {showShortcuts && <KeyboardShortcuts onClose={() => setShowShortcuts(false)} />}
+      <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} settings={settings} onSettingsChange={setSettings} />
+      <FullscreenVideo isOpen={showFullscreenVideo} onClose={() => setShowFullscreenVideo(false)} cameraIp={telemetry.cam_ip || '192.168.4.3'} cameraStatus={telemetry.camera_status} />
 
-      {/* Fullscreen Video */}
-      <FullscreenVideo
-        isOpen={showFullscreenVideo}
-        onClose={() => setShowFullscreenVideo(false)}
-        cameraIp={telemetry?.cam_ip || '192.168.4.3'}
-        cameraStatus={telemetry?.camera_status || false}
-      />
-
-      {/* Header */}
-      <header className="card p-6 m-6 animate-slide-up">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-4">
-            <div className="bg-nightfall-accent p-3 rounded-lg glow">
-              <Radio className="w-8 h-8 text-white" />
+      {/* HEADER */}
+      <header className="mb-6 flex flex-wrap justify-between items-center bg-gray-800/50 p-4 rounded-2xl backdrop-blur-sm border border-gray-700/50 shadow-xl relative overflow-hidden">
+        <div className="absolute inset-0 rounded-2xl opacity-10 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 animate-pulse" />
+        <div className="flex items-center gap-4 relative z-10">
+            <div className="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-900/40 relative">
+              <Radio className="w-6 h-6 text-white" />
+              {connectionState === ConnectionStates.CONNECTED && <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-ping" />}
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-shadow">Project Nightfall — Manual Control</h1>
-              <p className="text-gray-400 text-sm">Enhanced rescue robot control dashboard v2.1</p>
+              <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400">Project Nightfall</h1>
+              <div className="flex items-center gap-2 text-gray-400 text-xs font-medium tracking-wide"><span>Autonomous Rescue System</span><span className="text-gray-600">//</span><Tooltip content="Version 3.3.0"><span className="text-purple-400 cursor-help">V3.3.0</span></Tooltip></div>
             </div>
-          </div>
-
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className={`status-indicator ${connectionStatus.className}`}>
-              <StatusIcon className="w-5 h-5 mr-2" />
-              {connectionStatus.text}
-            </div>
-            
-            <Tooltip content="Manual Reconnect">
-              <button
-                onClick={() => {
-                  reconnectAttemptsRef.current = 0;
-                  setReconnectAttempts(0);
-                  connectWebSocket();
-                }}
-                className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-                aria-label="Reconnect"
-              >
-                <Radio className="w-5 h-5" />
-              </button>
-            </Tooltip>
-            
-            {connectionStats.averageLatency > 0 && (
-              <Tooltip content="Average network latency">
-                <div className="bg-gray-700 px-3 py-2 rounded-lg text-sm">
-                  <div className="text-gray-400">Latency</div>
-                  <div className="font-mono">{connectionStats.averageLatency}ms</div>
-                </div>
-              </Tooltip>
-            )}
-
-            <Tooltip content="Dashboard Settings">
-              <button
-                onClick={() => setShowSettings(true)}
-                className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-                aria-label="Open settings"
-              >
-                <Settings className="w-5 h-5" />
-              </button>
-            </Tooltip>
-
-            <Tooltip content={showAnalytics ? "Hide Analytics" : "Show Analytics"}>
-              <button
-                onClick={() => setShowAnalytics(!showAnalytics)}
-                className={`p-2 rounded-lg transition-colors ${
-                  showAnalytics 
-                    ? 'bg-nightfall-accent text-white' 
-                    : 'bg-gray-700 hover:bg-gray-600'
-                }`}
-                aria-label="Toggle analytics"
-              >
-                <BarChart3 className="w-5 h-5" />
-              </button>
-            </Tooltip>
-          </div>
+        </div>
+        <div className="flex gap-2 items-center relative z-10 mt-4 sm:mt-0">
+            <Tooltip content="Keyboard Shortcuts (?)"><button onClick={() => setShowShortcuts(true)} className="p-2 bg-gray-700/50 hover:bg-gray-600 rounded-lg transition-all"><Keyboard className="w-5 h-5" /></button></Tooltip>
+            <Tooltip content={soundEnabled ? 'Sound On' : 'Sound Off'}><button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 bg-gray-700/50 hover:bg-gray-600 rounded-lg transition-all">{soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}</button></Tooltip>
+            {telemetry.auto_mode && (<div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-purple-500/50 text-purple-400 bg-purple-500/10 animate-pulse"><Bot className="w-4 h-4" /><span className="font-semibold text-sm hidden sm:inline">AUTO PILOT</span></div>)}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${connectionState === ConnectionStates.CONNECTED ? 'text-green-400 bg-green-400/10 border-green-500/30' : 'text-red-400 bg-red-400/10 border-red-500/30'}`}><Wifi className="w-4 h-4" /><div className="flex flex-col"><span className="font-semibold text-sm capitalize hidden sm:inline">{connectionState}</span></div></div>
+            <div className="hidden md:flex items-center gap-1 px-3 py-1.5 bg-gray-700/30 rounded-lg border border-gray-700/50"><Clock className="w-4 h-4 text-gray-400" /><span className="font-mono text-sm text-gray-300">{formatUptime(telemetry.uptime)}</span></div>
+            <button onClick={() => setShowSettings(true)} className="p-2 bg-gray-700/50 hover:bg-gray-600 rounded-lg transition-all"><Settings className="w-5 h-5" /></button>
         </div>
       </header>
 
-      {/* Three-Zone Layout */}
-      <div className="px-6 pb-6">
-        {/* Analytics Section (Optional) */}
-        {showAnalytics && (
-          <div className="mb-6 animate-slide-up">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <TelemetryChart
-                data={batteryHistory}
-                title="Battery Voltage"
-                color="#10b981"
-                icon={Battery}
-                unit="V"
-              />
-              <TelemetryChart
-                data={gasHistory}
-                title="Gas Level"
-                color="#f59e0b"
-                icon={Wind}
-                unit=""
-              />
-              <TelemetryChart
-                data={distanceHistory}
-                title="Distance"
-                color="#3b82f6"
-                icon={Gauge}
-                unit="cm"
-              />
-              <TelemetryChart
-                data={signalHistory}
-                title="WiFi Signal"
-                color="#8b5cf6"
-                icon={Signal}
-                unit="%"
-              />
+      {/* MAIN LAYOUT */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        {/* ZONE A: VIDEO */}
+        <div className="xl:col-span-7 bg-black rounded-2xl overflow-hidden border border-gray-800 shadow-2xl relative group h-[400px] sm:h-[500px]">
+             <div className="absolute inset-0 pointer-events-none z-10 bg-[radial-gradient(circle,transparent_60%,rgba(0,0,0,0.8)_100%)]" />
+             {telemetry.camera_status && (<div className="absolute top-4 left-4 flex items-center gap-2 z-20"><span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span></span><span className="text-red-400 font-bold text-xs tracking-wider uppercase">REC</span></div>)}
+             {telemetry.cam_ip ? (<img src={`http://${telemetry.cam_ip}:81/stream`} className="w-full h-full object-contain" alt="Live Feed" onLoad={() => fpsCounterRef.current.frames++} onError={(e) => { e.target.style.display='none'; }} />) : (<div className="flex flex-col items-center justify-center h-full text-gray-500 animate-pulse"><Camera className="w-16 h-16 mb-4 opacity-50" /><p className="text-sm">Searching for Camera Signal...</p></div>)}
+             <div className="absolute bottom-4 left-4 right-4 z-20 flex justify-between items-end">
+               <div className="bg-black/60 backdrop-blur px-3 py-1.5 rounded-lg border border-white/10 text-xs">
+                  <div className="flex items-center gap-2 mb-1"><Eye className="w-3 h-3 text-blue-400" /> <span>FPS: <span className="font-mono text-white">{videoFps}</span></span></div>
+                  <div className="flex items-center gap-2"><Signal className="w-3 h-3 text-purple-400" /> <span>Signal: <span className="font-mono text-white">{telemetry.signal_strength}dB</span></span></div>
+               </div>
+               <div ref={commandFeedbackRef} className="bg-black/60 backdrop-blur px-4 py-2 rounded-lg border border-white/10 font-bold text-lg text-white tracking-widest uppercase opacity-0 transition-opacity duration-300"></div>
+             </div>
+             <button onClick={() => setShowFullscreenVideo(true)} className="absolute top-4 right-4 p-2 bg-black/60 hover:bg-black/80 rounded-lg backdrop-blur text-white z-20 opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"><Maximize2 className="w-5 h-5" /></button>
+        </div>
+
+        {/* ZONE B: CONTROLS */}
+        <div className="xl:col-span-5 flex flex-col gap-6">
+            <div className="bg-gray-800/40 p-6 rounded-2xl border border-gray-700/50 shadow-xl flex-1 flex flex-col justify-center relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 rounded-2xl pointer-events-none" />
+                <div className="flex justify-between items-center mb-6 relative z-10">
+                    <h2 className="text-lg font-semibold flex items-center gap-2"><Zap className="w-5 h-5 text-yellow-400" /> Controls</h2>
+                    <button onClick={toggleAuto} className={`px-4 py-2 rounded-lg font-bold text-xs tracking-wider transition-all flex items-center gap-2 ${telemetry.auto_mode ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-500/30' : 'bg-gray-700 hover:bg-gray-600 text-gray-300 border border-gray-600'}`}><Bot className="w-4 h-4" />{telemetry.auto_mode ? 'DISABLE AUTO' : 'ENABLE AUTO'}</button>
+                </div>
+                <div className="grid grid-cols-3 gap-3 max-w-[220px] mx-auto mb-6 relative z-10">
+                    <div></div>
+                    <button onMouseDown={moveForward} onMouseUp={stopRobot} onTouchStart={moveForward} onTouchEnd={stopRobot} className="h-14 bg-blue-600 hover:bg-blue-500 rounded-xl shadow-lg shadow-blue-900/40 flex items-center justify-center active:scale-95 transition-all"><ArrowUp className="w-6 h-6"/></button>
+                    <div></div>
+                    <button onMouseDown={turnLeft} onMouseUp={stopRobot} onTouchStart={turnLeft} onTouchEnd={stopRobot} className="h-14 bg-gray-700 hover:bg-gray-600 rounded-xl flex items-center justify-center active:scale-95 transition-all"><ArrowLeft className="w-6 h-6"/></button>
+                    <button onClick={stopRobot} className="h-14 bg-red-900/20 border border-red-500/50 text-red-500 hover:bg-red-900/40 rounded-xl flex items-center justify-center active:scale-95 transition-all"><StopCircle className="w-6 h-6"/></button>
+                    <button onMouseDown={turnRight} onMouseUp={stopRobot} onTouchStart={turnRight} onTouchEnd={stopRobot} className="h-14 bg-gray-700 hover:bg-gray-600 rounded-xl flex items-center justify-center active:scale-95 transition-all"><ArrowRight className="w-6 h-6"/></button>
+                    <div></div>
+                    <button onMouseDown={moveBackward} onMouseUp={stopRobot} onTouchStart={moveBackward} onTouchEnd={stopRobot} className="h-14 bg-gray-700 hover:bg-gray-600 rounded-xl flex items-center justify-center active:scale-95 transition-all"><ArrowDown className="w-6 h-6"/></button>
+                    <div></div>
+                </div>
+                <button onClick={emergencyStop} className={`w-full py-3 rounded-xl font-bold tracking-widest transition-all relative z-10 ${telemetry.emergency ? 'bg-yellow-500 text-black animate-pulse' : 'bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-900/30'}`}>{telemetry.emergency ? 'RESET SYSTEM' : 'EMERGENCY STOP'}</button>
             </div>
+            <div className="bg-gray-800/40 rounded-2xl border border-gray-700/50 shadow-xl overflow-hidden">
+                <SystemHealthPanel systemHealth={systemHealth} telemetry={telemetry} performanceMetrics={performanceMetrics} connectionStats={connectionStats} />
+            </div>
+        </div>
+
+        {/* ZONE C: ANALYTICS */}
+        {showAnalytics && (
+             <div className="xl:col-span-12 grid grid-cols-1 md:grid-cols-4 gap-6 animate-slide-up">
+                 <TelemetryChart data={batteryHistory} title="Voltage" color="#10b981" icon={Battery} unit="V" />
+                 <TelemetryChart data={gasHistory} title="Gas Level" color="#f59e0b" icon={Wind} unit="" />
+                 <TelemetryChart data={distanceHistory} title="Distance" color="#3b82f6" icon={Gauge} unit="cm" />
+                 <div className="bg-gray-800 p-4 rounded-xl border border-gray-700"><DataExportPanel telemetry={telemetry} waypoints={[]} alerts={alerts} connectionStats={connectionStats} /></div>
+             </div>
+        )}
+        
+        {/* ALERTS */}
+        {alerts.length > 0 && (
+          <div className="fixed bottom-6 right-6 flex flex-col gap-2 pointer-events-none z-50">
+            {alerts.map(alert => (
+              <div key={alert.id} className={`p-4 rounded-xl shadow-xl flex items-center gap-3 animate-slide-up ${alert.type === 'error' ? 'bg-red-600/90 text-white' : alert.type === 'success' ? 'bg-green-600/90 text-white' : 'bg-gray-800/90 text-white'}`}>
+                {alert.type === 'error' ? <AlertCircle className="w-5 h-5"/> : <div className="w-2 h-2 rounded-full bg-white"/>}
+                <span className="font-medium text-sm">{alert.message}</span>
+              </div>
+            ))}
           </div>
         )}
-
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-          
-          {/* Zone A: Video & Vision Processing (60% width) */}
-          <div className="xl:col-span-7 space-y-6 animate-slide-up">
-            <div className="card p-6 h-full card-hover">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold flex items-center gap-3">
-                  <Eye className="w-6 h-6 text-robot-vision" />
-                  Live Vision Feed
-                </h2>
-                <div className="flex items-center gap-4">
-                  <div className={`flex items-center gap-2 ${telemetry?.camera_status ? 'text-green-400' : 'text-red-400'}`}>
-                    <Circle className="w-3 h-3 fill-current animate-pulse" />
-                    <span className="text-sm">{telemetry?.camera_status ? 'Streaming' : 'Offline'}</span>
-                  </div>
-                  <div className="text-sm text-gray-400">
-                    FPS: {videoFps}
-                  </div>
-                  <Tooltip content="Fullscreen Mode">
-                    <button
-                      onClick={() => setShowFullscreenVideo(true)}
-                      className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-                      aria-label="Fullscreen"
-                    >
-                      <Maximize2 className="w-4 h-4" />
-                    </button>
-                  </Tooltip>
-                </div>
-              </div>
-
-              <div className="bg-black rounded-lg overflow-hidden aspect-video border-2 border-gray-700 relative group">
-                {telemetry?.camera_status ? (
-                  <>
-                    <img 
-                      src={`http://${telemetry?.cam_ip || '192.168.4.3'}:81/stream`}
-                      alt="Robot camera feed"
-                      className="w-full h-full object-cover"
-                      onLoad={() => fpsCounterRef.current.frames++}
-                      onError={() => addAlert('Camera stream error', 'error')}
-                    />
-                    
-                    {/* HUD Overlay */}
-                    <div className="hud-overlay">
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-300">Distance:</span>
-                          <span className={`font-mono font-bold ${getDistanceColor(telemetry?.dist || 0)}`}>
-                            {Math.round(telemetry?.dist || 0)}cm
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-300">Gas Level:</span>
-                          <span className={`font-mono font-bold ${getGasColor(telemetry?.gas || 0)}`}>
-                            {Math.round(telemetry?.gas || 0)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-300">Camera IP:</span>
-                          <span className="font-mono text-blue-400">{telemetry?.cam_ip || '192.168.4.3'}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-300">Time:</span>
-                          <span className="font-mono text-gray-300">
-                            {new Date().toLocaleTimeString()}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Recording indicator */}
-                    <div className="absolute top-4 left-4 bg-red-600 px-3 py-1 rounded-full flex items-center gap-2">
-                      <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                      <span className="text-xs font-medium">REC</span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <div className="text-center">
-                      <Camera className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                      <div className="text-gray-400 text-lg">Waiting for Camera...</div>
-                      <div className="text-gray-500 text-sm mt-2">Ensure ESP32-CAM is connected</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Zone B: System Health Dashboard (25% width) */}
-          <div className="xl:col-span-3 space-y-6 animate-slide-in-right">
-            <div className="card p-6 card-hover">
-              <h2 className="text-xl font-semibold mb-4 flex items-center gap-3">
-                <Cpu className="w-6 h-6 text-robot-brain" />
-                System Health
-              </h2>
-
-              {/* Connection Status Indicators */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`robot-status-brain ${getStatusColor(systemHealth.brain)}`}></div>
-                    <span className="font-medium">BRAIN</span>
-                  </div>
-                  <span className="text-sm text-gray-400">Back ESP32</span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`robot-status-motors ${getStatusColor(systemHealth.motors)}`}></div>
-                    <span className="font-medium">MOTORS</span>
-                  </div>
-                  <span className="text-sm text-gray-400">Front ESP32</span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`robot-status-vision ${getStatusColor(systemHealth.vision)}`}></div>
-                    <span className="font-medium">VISION</span>
-                  </div>
-                  <span className="text-sm text-gray-400">Camera ESP32</span>
-                </div>
-              </div>
-
-              {/* Sensor Metrics */}
-              <div className="mt-6 space-y-4">
-                <h3 className="text-sm font-semibold text-gray-300">Real-time Sensors</h3>
-                
-                {/* Battery Level */}
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-400 flex items-center gap-2">
-                      <Battery className={`w-4 h-4 ${getBatteryColor(telemetry?.battery || 14.8)}`} />
-                      Battery
-                    </span>
-                    <span className={`font-mono font-bold ${getBatteryColor(telemetry?.battery || 14.8)}`}>
-                      {(telemetry?.battery || 14.8).toFixed(1)}V
-                    </span>
-                  </div>
-                  <div className="metric-bar">
-                    <div 
-                      className={`metric-fill ${getBatteryColor(telemetry?.battery || 14.8).replace('text-', 'bg-')}`}
-                      style={{ width: `${Math.max(0, Math.min(((telemetry?.battery || 14.8) - 11) / (14.8 - 11) * 100, 100))}%` }}
-                    ></div>
-                  </div>
-                </div>
-
-                {/* Signal Strength */}
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-400 flex items-center gap-2">
-                      <Signal className="w-4 h-4" />
-                      WiFi Signal
-                    </span>
-                    <span className="font-mono font-bold text-blue-400">
-                      {telemetry?.signal_strength || 0}%
-                    </span>
-                  </div>
-                  <div className="metric-bar">
-                    <div 
-                      className="metric-fill bg-blue-500"
-                      style={{ width: `${telemetry?.signal_strength || 0}%` }}
-                    ></div>
-                  </div>
-                </div>
-
-                {/* Gas Level */}
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-400 flex items-center gap-2">
-                      <Wind className="w-4 h-4" />
-                      Gas Level
-                    </span>
-                    <span className={`font-mono font-bold ${getGasColor(telemetry?.gas || 0)}`}>
-                      {Math.round(telemetry?.gas || 0)}
-                    </span>
-                  </div>
-                  <div className="metric-bar">
-                    <div 
-                      className={`metric-fill ${getGasColor(telemetry?.gas || 0).replace('text-', 'bg-')}`}
-                      style={{ width: `${Math.min((telemetry?.gas || 0) / 4095 * 100, 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
-
-                {/* System Uptime */}
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-400 flex items-center gap-2">
-                      <Clock className="w-4 h-4" />
-                      Uptime
-                    </span>
-                    <span className="font-mono font-bold text-green-400">
-                      {Math.floor((telemetry?.uptime || 0) / 3600)}h {Math.floor(((telemetry?.uptime || 0) % 3600) / 60)}m
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Performance Metrics */}
-              <div className="mt-6 pt-4 border-t border-gray-700">
-                <h3 className="text-sm font-semibold text-gray-300 mb-3">Performance</h3>
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div className="bg-gray-800 p-2 rounded">
-                    <div className="text-gray-400">Data Rate</div>
-                    <div className="font-mono text-green-400">{performanceMetrics.dataRate} KB/s</div>
-                  </div>
-                  <div className="bg-gray-800 p-2 rounded">
-                    <div className="text-gray-400">Success Rate</div>
-                    <div className="font-mono text-blue-400">{performanceMetrics.commandSuccessRate}%</div>
-                  </div>
-                  <div className="bg-gray-800 p-2 rounded">
-                    <div className="text-gray-400">Messages</div>
-                    <div className="font-mono text-purple-400">{connectionStats.messagesReceived}</div>
-                  </div>
-                  <div className="bg-gray-800 p-2 rounded">
-                    <div className="text-gray-400">Latency</div>
-                    <div className="font-mono text-yellow-400">{connectionStats.averageLatency}ms</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Data Export */}
-              <div className="mt-6 pt-4 border-t border-gray-700">
-                <DataExportPanel
-                  telemetry={telemetry || {}}
-                  waypoints={[]}
-                  alerts={alerts}
-                  connectionStats={connectionStats}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Zone C: Command & Control Interface (40% width) */}
-          <div className="xl:col-span-2 space-y-6 animate-slide-in-right" style={{ animationDelay: '0.1s' }}>
-            <div className="card p-6 card-hover">
-              <h2 className="text-xl font-semibold mb-4 flex items-center gap-3">
-                <Zap className="w-6 h-6 text-nightfall-accent" />
-                Manual Control
-              </h2>
-
-              {/* Movement Controls */}
-              <div className="mb-6">
-                <h3 className="text-sm font-semibold text-gray-300 mb-3">Movement Controls</h3>
-                <div className="control-grid">
-                  <div></div>
-                  <button 
-                    onClick={moveForward}
-                    className="control-btn-forward"
-                    aria-label="Move forward"
-                  >
-                    <ArrowUp className="w-6 h-6 mx-auto" />
-                  </button>
-                  <div></div>
-
-                  <button 
-                    onClick={turnLeft}
-                    className="control-btn-left"
-                    aria-label="Turn left"
-                  >
-                    <ArrowLeft className="w-6 h-6 mx-auto" />
-                  </button>
-
-                  <button 
-                    onClick={() => sendMotorCommand(0, 0)}
-                    className="control-btn-stop"
-                    aria-label="Stop"
-                  >
-                    <StopCircle className="w-6 h-6 mx-auto" />
-                  </button>
-
-                  <button 
-                    onClick={turnRight}
-                    className="control-btn-right"
-                    aria-label="Turn right"
-                  >
-                    <ArrowRight className="w-6 h-6 mx-auto" />
-                  </button>
-
-                  <div></div>
-                  <button 
-                    onClick={moveBackward}
-                    className="control-btn-back"
-                    aria-label="Move backward"
-                  >
-                    <ArrowDown className="w-6 h-6 mx-auto" />
-                  </button>
-
-                  <div></div>
-                </div>
-
-                <div className="mt-4">
-                  <button 
-                    onClick={rotateClockwise}
-                    className="control-btn-rotate w-full"
-                    aria-label="Rotate clockwise"
-                  >
-                    <RotateCw className="w-5 h-5 mx-auto mr-2" />
-                    Rotate
-                  </button>
-                </div>
-              </div>
-
-              {/* Emergency Stop */}
-              <div className="mb-6">
-                <Tooltip content="Immediately stop all robot movement (Space/Esc)">
-                  <button 
-                    onClick={emergencyStop}
-                    className="emergency-stop w-full flex flex-col items-center justify-center"
-                    aria-label="Emergency stop"
-                  >
-                    <Power className="w-8 h-8 mb-1" />
-                    <span className="text-xs font-bold">EMERGENCY</span>
-                  </button>
-                </Tooltip>
-              </div>
-
-              {/* Current Motor State */}
-              <div className="bg-gray-800 p-4 rounded-lg">
-                <h3 className="text-sm font-semibold text-gray-300 mb-3">Motor Status</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Left Motor:</span>
-                    <span className="font-mono font-bold text-blue-400">{motorState.left}</span>
-                  </div>
-                  <div className="w-full bg-gray-700 rounded-full h-2">
-                    <div 
-                      className="h-2 rounded-full bg-blue-500 transition-all"
-                      style={{ width: `${Math.min(Math.abs(motorState.left) / 255 * 100, 100)}%` }}
-                    ></div>
-                  </div>
-                  
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Right Motor:</span>
-                    <span className="font-mono font-bold text-blue-400">{motorState.right}</span>
-                  </div>
-                  <div className="w-full bg-gray-700 rounded-full h-2">
-                    <div 
-                      className="h-2 rounded-full bg-blue-500 transition-all"
-                      style={{ width: `${Math.min(Math.abs(motorState.right) / 255 * 100, 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Keyboard Shortcuts */}
-              <div className="mt-6 p-4 bg-gray-800 rounded-lg">
-                <h3 className="text-sm font-semibold text-gray-300 mb-3">Keyboard Shortcuts</h3>
-                <div className="space-y-1 text-xs text-gray-400">
-                  <div className="flex justify-between">
-                    <span>W / ↑</span>
-                    <span>Forward</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>S / ↓</span>
-                    <span>Backward</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>A / ←</span>
-                    <span>Turn Left</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>D / →</span>
-                    <span>Turn Right</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Space / Esc</span>
-                    <span>Emergency Stop</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Ctrl + R</span>
-                    <span>Rotate</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Alerts Panel */}
-        <div className="mt-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
-          <div className="card p-6 card-hover">
-            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-nightfall-warning" />
-              System Alerts ({alerts.length})
-            </h3>
-            
-            <div className="max-h-48 overflow-y-auto space-y-2">
-              {alerts.length === 0 ? (
-                <div className="text-center text-gray-500 py-4">
-                  <Circle className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <div className="text-sm">No active alerts</div>
-                </div>
-              ) : (
-                alerts.map(alert => (
-                  <div 
-                    key={alert.id} 
-                    className={`p-3 rounded-lg text-sm ${
-                      alert.type === 'error' 
-                        ? 'bg-nightfall-error/20 border border-nightfall-error/30 text-nightfall-error' 
-                        : alert.type === 'warning' 
-                        ? 'bg-nightfall-warning/20 border border-nightfall-warning/30 text-nightfall-warning'
-                        : 'bg-nightfall-accent/20 border border-nightfall-accent/30 text-nightfall-accent'
-                    }`}
-                  >
-                    <div className="flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                      <div className="flex-1">
-                        <div>{alert.message}</div>
-                        <div className="text-xs opacity-75 mt-1">
-                          {alert.timestamp.toLocaleTimeString()}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

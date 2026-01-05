@@ -1,507 +1,153 @@
 /**
  * @file    main_camera.cpp
- * @brief   Project Nightfall - Phase 2 MVP CAMERA ESP32 (Telemetry Node)
- * @author  Project Nightfall Team
- * @version 2.0.0
- * @date    December 29, 2025
- *
- * Telemetry node for the autonomous rescue robot. Handles:
- * - WiFi client connection to "ProjectNightfall" AP
- * - WebSocket connection to master ESP32 (192.168.4.1:8888)
- * - Heartbeat telemetry every 5 seconds
- * - Flash LED (pin 4) and Status LED (pin 33) control
- * - Non-blocking operation with millis() timers
- * - Robust JSON communication with ArduinoJson v7
+ * @brief   Project Nightfall - Optimized Camera Node
+ * @version 3.1.0
  */
-
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebSocketsClient.h>
-#include <ArduinoJson.h>
-#include <ArduinoJson.hpp>
+#include "esp_camera.h"
+#include "esp_timer.h"
+#include "img_converters.h"
+#include "fb_gfx.h"
+#include "soc/soc.h" 
+#include "soc/rtc_cntl_reg.h"
 
-// Define controller type for conditional compilation BEFORE including pins.h
-#define CAMERA_MODULE
+#define PWDN_GPIO_NUM     32
+#define RESET_GPIO_NUM    -1
+#define XCLK_GPIO_NUM      0
+#define SIOD_GPIO_NUM     26
+#define SIOC_GPIO_NUM     27
+#define Y9_GPIO_NUM       35
+#define Y8_GPIO_NUM       34
+#define Y7_GPIO_NUM       39
+#define Y6_GPIO_NUM       36
+#define Y5_GPIO_NUM       21
+#define Y4_GPIO_NUM       19
+#define Y3_GPIO_NUM       18
+#define Y2_GPIO_NUM        5
+#define VSYNC_GPIO_NUM    25
+#define HREF_GPIO_NUM     23
+#define PCLK_GPIO_NUM     22
+#define FLASH_LED_PIN      4
+#define STATUS_LED_PIN    33 
 
-// Include our libraries
-#include "config.h"
-#include "pins.h"
-
-// Global objects
-WebSocketsClient webSocket;
-
-// System state
-bool systemReady = false;
-bool wifiConnected = false;
-bool webSocketConnected = false;
-unsigned long lastHeartbeat = 0;
-unsigned long lastConnectionCheck = 0;
-unsigned long lastLEDUpdate = 0;
-bool flashLEDState = false;
-bool statusLEDState = false;
-
-// WiFi configuration (primary: connect to Master AP; fallback: create AP)
 const char *ssid = "ProjectNightfall";
 const char *password = "rescue2025";
-const unsigned long wifi_connect_timeout_ms = 10000;
+const char *master_host = "192.168.4.1";
+const uint16_t master_port = 8888;
 
-// WebSocket configuration
-const char *websocket_host = "192.168.4.1";
-const uint16_t websocket_port = 8888;
+WebSocketsClient webSocket;
+WiFiServer streamServer(80);
 
-// Function declarations
-void setup();
-void loop();
-void initializeHardware();
-void setupWiFi();
-void startFallbackAP();
-void setupWebSocket();
-void handleMainLoop();
-void checkConnections();
+unsigned long lastHeartbeat = 0;
+bool flashState = false;
+
+void setupCamera();
+void handleStream();
 void sendHeartbeat();
-void handleWebSocketEvent(WStype_t type, uint8_t *payload, size_t length);
-void updateLEDs();
-void connectToWiFi();
-void connectToWebSocket();
-void handleSerialCommands();
+void webSocketEvent(WStype_t type, uint8_t * payload, size_t length);
 
-// Setup function
-void setup()
-{
-    // Initialize serial communication
-    Serial.begin(115200);
-    DEBUG_PRINTLN();
-    DEBUG_PRINTLN("╔═══════════════════════════════════════════╗");
-    DEBUG_PRINTLN("║     PROJECT NIGHTFALL CAMERA ESP32        ║");
-    DEBUG_PRINTLN("║            Telemetry Node                 ║");
-    DEBUG_PRINTLN("║              Version 2.0.0                ║");
-    DEBUG_PRINTLN("╚═══════════════════════════════════════════╝");
-    DEBUG_PRINTLN();
+void setup() {
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); 
+  Serial.begin(115200);
+  
+  pinMode(FLASH_LED_PIN, OUTPUT);
+  pinMode(STATUS_LED_PIN, OUTPUT);
+  digitalWrite(FLASH_LED_PIN, LOW);
+  digitalWrite(STATUS_LED_PIN, HIGH);
 
-    // Initialize hardware
-    initializeHardware();
+  setupCamera();
 
-    // Setup WiFi and WebSocket
-    setupWiFi();
-    setupWebSocket();
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    digitalWrite(STATUS_LED_PIN, !digitalRead(STATUS_LED_PIN)); 
+  }
+  
+  digitalWrite(STATUS_LED_PIN, LOW); 
+  streamServer.begin();
 
-    systemReady = true;
+  webSocket.begin(master_host, master_port, "/");
+  webSocket.onEvent(webSocketEvent);
+  webSocket.setReconnectInterval(5000);
+}
+
+void loop() {
+  webSocket.loop();
+  handleStream();
+
+  if (millis() - lastHeartbeat > 2000) {
+    sendHeartbeat();
     lastHeartbeat = millis();
-    lastConnectionCheck = millis();
-    lastLEDUpdate = millis();
-
-    DEBUG_PRINTLN();
-    DEBUG_PRINTLN("✅ CAMERA ESP32 Telemetry Node Ready!");
-    DEBUG_PRINT("WiFi SSID: ");
-    DEBUG_PRINTLN(ssid);
-    DEBUG_PRINT("WebSocket Host: ");
-    DEBUG_PRINT(websocket_host);
-    DEBUG_PRINT(":");
-    DEBUG_PRINTLN(websocket_port);
-    DEBUG_PRINTLN();
+  }
 }
 
-// Main loop
-void loop()
-{
-    handleMainLoop();
-    yield();
+void setupCamera() {
+  camera_config_t config;
+  config.ledc_channel = LEDC_CHANNEL_0;
+  config.ledc_timer = LEDC_TIMER_0;
+  config.pin_d0 = Y2_GPIO_NUM;
+  config.pin_d1 = Y3_GPIO_NUM;
+  config.pin_d2 = Y4_GPIO_NUM;
+  config.pin_d3 = Y5_GPIO_NUM;
+  config.pin_d4 = Y6_GPIO_NUM;
+  config.pin_d5 = Y7_GPIO_NUM;
+  config.pin_d6 = Y8_GPIO_NUM;
+  config.pin_d7 = Y9_GPIO_NUM;
+  config.pin_xclk = XCLK_GPIO_NUM;
+  config.pin_pclk = PCLK_GPIO_NUM;
+  config.pin_vsync = VSYNC_GPIO_NUM;
+  config.pin_href = HREF_GPIO_NUM;
+  config.pin_sscb_sda = SIOD_GPIO_NUM;
+  config.pin_sscb_scl = SIOC_GPIO_NUM;
+  config.pin_pwdn = PWDN_GPIO_NUM;
+  config.pin_reset = RESET_GPIO_NUM;
+  config.xclk_freq_hz = 20000000;
+  config.pixel_format = PIXFORMAT_JPEG;
+  config.frame_size = FRAMESIZE_QVGA; 
+  config.jpeg_quality = 15;           
+  config.fb_count = 2;
+  esp_camera_init(&config);
 }
 
-void initializeHardware()
-{
-    DEBUG_PRINTLN("Initializing hardware...");
+void handleStream() {
+  WiFiClient client = streamServer.available();
+  if (!client) return;
 
-    // Initialize LED pins per pin.md specifications
-    pinMode(4, OUTPUT);              // Flash LED
-    pinMode(PIN_STATUS_LED, OUTPUT); // Status LED (GPIO33 - LOW=ON per pin.md)
+  String req = client.readStringUntil('\r');
+  if (req.indexOf("GET /stream") != -1) {
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: multipart/x-mixed-replace; boundary=frame");
+    client.println();
 
-    // Turn off LEDs initially
-    digitalWrite(4, LOW);
-    digitalWrite(PIN_STATUS_LED, LOW); // LOW=ON for status LED
-
-    DEBUG_PRINTLN("Hardware initialized");
-    DEBUG_PRINTLN("Flash LED: Pin 4");
-    DEBUG_PRINTLN("Status LED: GPIO33 (LOW=ON)");
+    while (client.connected()) {
+      camera_fb_t * fb = esp_camera_fb_get();
+      if (!fb) break;
+      client.printf("Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n", fb->len);
+      client.write(fb->buf, fb->len);
+      client.println("\r\n--frame");
+      esp_camera_fb_return(fb);
+      webSocket.loop(); 
+    }
+  }
+  client.stop();
 }
 
-void setupWiFi()
-{
-    DEBUG_PRINTLN("Setting up WiFi client connection...");
-
-    // Connect to WiFi
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid, password);
-
-    DEBUG_PRINT("Connecting to WiFi");
-
-    unsigned long startTime = millis();
-    while (WiFi.status() != WL_CONNECTED && (millis() - startTime < wifi_connect_timeout_ms))
-    {
-        delay(500);
-        DEBUG_PRINT(".");
-
-        // Flash status LED while connecting (GPIO33 - LOW=ON)
-        static unsigned long lastFlash = 0;
-        if (millis() - lastFlash > 200)
-        {
-            statusLEDState = !statusLEDState;
-            digitalWrite(PIN_STATUS_LED, statusLEDState ? HIGH : LOW);
-            lastFlash = millis();
-        }
-    }
-
-    if (WiFi.status() == WL_CONNECTED)
-    {
-        wifiConnected = true;
-        IPAddress IP = WiFi.localIP();
-
-        DEBUG_PRINTLN();
-        DEBUG_PRINTLN("WiFi connected successfully!");
-        DEBUG_PRINT("IP Address: ");
-        DEBUG_PRINTLN(IP);
-        DEBUG_PRINT("RSSI: ");
-        DEBUG_PRINT(WiFi.RSSI());
-        DEBUG_PRINTLN(" dBm");
-
-        // Turn on status LED to indicate successful connection (GPIO33 - LOW=ON)
-        digitalWrite(PIN_STATUS_LED, LOW); // LOW turns LED on
-    }
-    else
-    {
-        wifiConnected = false;
-        DEBUG_PRINTLN();
-        DEBUG_PRINTLN("WiFi connection failed! (STA only)");
-
-        // Blink status LED to indicate error (GPIO33 - LOW=ON)
-        for (int i = 0; i < 6; i++)
-        {
-            digitalWrite(PIN_STATUS_LED, LOW); // LED on
-            delay(100);
-            digitalWrite(PIN_STATUS_LED, HIGH); // LED off
-            delay(100);
-        }
-    }
+void sendHeartbeat() {
+  char buffer[128];
+  snprintf(buffer, sizeof(buffer), 
+    "{\"type\":\"cam_telemetry\",\"ip\":\"%s\",\"rssi\":%d}", 
+    WiFi.localIP().toString().c_str(), WiFi.RSSI());
+  webSocket.sendTXT(buffer);
 }
 
-void setupWebSocket()
-{
-    DEBUG_PRINTLN("Setting up WebSocket client...");
-
-    // Configure WebSocket
-    webSocket.begin(websocket_host, websocket_port);
-    webSocket.onEvent(handleWebSocketEvent);
-    webSocket.setReconnectInterval(5000);
-}
-
-void handleMainLoop()
-{
-    unsigned long now = millis();
-
-    // Check connections periodically
-    if (now - lastConnectionCheck >= 2000)
-    {
-        checkConnections();
-        lastConnectionCheck = now;
-    }
-
-    // Send heartbeat every 5 seconds
-    if (now - lastHeartbeat >= CAMERA_HEARTBEAT_INTERVAL)
-    {
-        sendHeartbeat();
-        lastHeartbeat = now;
-    }
-
-    // Update LEDs
-    updateLEDs();
-
-    // Handle WebSocket
-    webSocket.loop();
-
-    // Handle serial commands
-    handleSerialCommands();
-}
-
-void checkConnections()
-{
-    // Check WiFi connection
-    if (WiFi.status() == WL_CONNECTED)
-    {
-        if (!wifiConnected)
-        {
-            wifiConnected = true;
-            DEBUG_PRINTLN("WiFi reconnected");
-        }
-    }
-    else
-    {
-        if (wifiConnected)
-        {
-            wifiConnected = false;
-            webSocketConnected = false;
-            DEBUG_PRINTLN("WiFi disconnected");
-        }
-
-        // Try to reconnect WiFi
-        connectToWiFi();
-    }
-
-    // Check WebSocket connection
-    if (wifiConnected && !webSocketConnected)
-    {
-        connectToWebSocket();
-    }
-}
-
-void connectToWiFi()
-{
-    if (WiFi.status() != WL_CONNECTED)
-    {
-        DEBUG_PRINTLN("Attempting WiFi reconnection...");
-        WiFi.reconnect();
-
-        // Wait a bit for connection
-        delay(1000);
-    }
-}
-
-void connectToWebSocket()
-{
-    if (wifiConnected && !webSocketConnected)
-    {
-        DEBUG_PRINTLN("Attempting WebSocket connection...");
-        webSocket.begin(websocket_host, websocket_port);
-    }
-}
-
-void sendHeartbeat()
-{
-    if (webSocketConnected)
-    {
-        // Create heartbeat JSON
-        StaticJsonDocument<256> heartbeatDoc;
-        heartbeatDoc["type"] = "heartbeat";
-        heartbeatDoc["source"] = "camera";
-        heartbeatDoc["timestamp"] = millis();
-        heartbeatDoc["uptime"] = millis();
-        heartbeatDoc["wifi_rssi"] = WiFi.RSSI();
-        heartbeatDoc["wifi_ip"] = WiFi.localIP().toString();
-        heartbeatDoc["memory_free"] = ESP.getFreeHeap();
-        heartbeatDoc["boot_count"] = 1;
-        heartbeatDoc["version"] = VERSION_STRING;
-
-        String heartbeat;
-        serializeJson(heartbeatDoc, heartbeat);
-
-        // Send heartbeat via WebSocket
-        webSocket.sendTXT(heartbeat);
-
-        DEBUG_PRINT("Heartbeat sent - WiFi RSSI: ");
-        DEBUG_PRINT(WiFi.RSSI());
-        DEBUG_PRINT(" dBm, Free Memory: ");
-        DEBUG_PRINT(ESP.getFreeHeap());
-        DEBUG_PRINTLN(" bytes");
-    }
-    else
-    {
-        DEBUG_PRINTLN("Cannot send heartbeat - WebSocket not connected");
-    }
-}
-
-void handleWebSocketEvent(WStype_t type, uint8_t *payload, size_t length)
-{
-    String message;
-    DynamicJsonDocument doc(256);
-    DeserializationError error;
-    String command;
-
-    switch (type)
-    {
-    case WStype_CONNECTED:
-        webSocketConnected = true;
-        DEBUG_PRINTLN("WebSocket connected to master ESP32");
-
-        // Turn on status LED solid to indicate WebSocket connection (GPIO33 - LOW=ON)
-        digitalWrite(PIN_STATUS_LED, LOW); // LOW turns LED on
-
-        // Send immediate heartbeat upon connection
-        sendHeartbeat();
-        break;
-
-    case WStype_DISCONNECTED:
-        webSocketConnected = false;
-        DEBUG_PRINTLN("WebSocket disconnected from master ESP32");
-
-        // Blink status LED to indicate disconnection
-        statusLEDState = false;
-        break;
-
-    case WStype_TEXT:
-        message = String((char *)payload);
-        DEBUG_PRINT("WebSocket message received: ");
-        DEBUG_PRINTLN(message);
-
-        // Parse incoming messages (if any)
-        error = deserializeJson(doc, message);
-
-        if (!error)
-        {
-            if (doc.containsKey("command"))
-            {
-                command = doc["command"].as<String>();
-
-                if (command == "flash")
-                {
-                    // Flash LED command
-                    flashLEDState = true;
-                    digitalWrite(4, HIGH);
-                    DEBUG_PRINTLN("Flash LED activated");
-                }
-                else if (command == "status")
-                {
-                    // Send status update
-                    sendHeartbeat();
-                }
-            }
-        }
-        break;
-
-    case WStype_ERROR:
-        DEBUG_PRINTLN("WebSocket error occurred");
-        webSocketConnected = false;
-        break;
-
-    default:
-        break;
-    }
-}
-
-void updateLEDs()
-{
-    unsigned long now = millis();
-
-    if (flashLEDState && (now - lastLEDUpdate >= 500))
-    {
-        flashLEDState = false;
-        digitalWrite(4, LOW);
-    }
-
-    // Update Status LED pattern (GPIO33 - LOW=ON)
-    if (!wifiConnected)
-    {
-        // Blink red if WiFi not connected
-        if (now - lastLEDUpdate >= 500)
-        {
-            statusLEDState = !statusLEDState;
-            digitalWrite(PIN_STATUS_LED, statusLEDState ? HIGH : LOW);
-            lastLEDUpdate = now;
-        }
-    }
-    else if (wifiConnected && !webSocketConnected)
-    {
-        // Fast blink if WiFi connected but WebSocket not connected
-        if (now - lastLEDUpdate >= 200)
-        {
-            statusLEDState = !statusLEDState;
-            digitalWrite(PIN_STATUS_LED, statusLEDState ? HIGH : LOW);
-            lastLEDUpdate = now;
-        }
-    }
-    else if (webSocketConnected)
-    {
-        // Solid green if fully connected (LOW=ON)
-        digitalWrite(PIN_STATUS_LED, LOW);
-    }
-}
-
-// Serial command handler for debugging
-void handleSerialCommands()
-{
-    if (Serial.available())
-    {
-        String command = Serial.readStringUntil('\n');
-        command.trim();
-
-        if (command == "status")
-        {
-            Serial.println("=== CAMERA ESP32 STATUS ===");
-            Serial.print("Uptime: ");
-            Serial.print(millis() / 1000);
-            Serial.println(" seconds");
-            Serial.print("WiFi Connected: ");
-            Serial.println(wifiConnected ? "YES" : "NO");
-            Serial.print("WiFi IP: ");
-            Serial.println(WiFi.localIP());
-            Serial.print("WiFi RSSI: ");
-            Serial.print(WiFi.RSSI());
-            Serial.println(" dBm");
-            Serial.print("WebSocket Connected: ");
-            Serial.println(webSocketConnected ? "YES" : "NO");
-            Serial.print("Free Memory: ");
-            Serial.print(ESP.getFreeHeap());
-            Serial.println(" bytes");
-            Serial.print("Flash LED: ");
-            Serial.println(digitalRead(4) ? "ON" : "OFF");
-            Serial.print("Status LED: ");
-            Serial.println(digitalRead(PIN_STATUS_LED) ? "OFF" : "ON"); // GPIO33 is LOW=ON
-            Serial.print("Last Heartbeat: ");
-            Serial.print((millis() - lastHeartbeat) / 1000);
-            Serial.println(" seconds ago");
-            Serial.println("==========================");
-        }
-        else if (command == "wifi")
-        {
-            if (WiFi.status() == WL_CONNECTED)
-            {
-                Serial.println("WiFi Status: Connected");
-                Serial.print("IP: ");
-                Serial.println(WiFi.localIP());
-                Serial.print("RSSI: ");
-                Serial.print(WiFi.RSSI());
-                Serial.println(" dBm");
-            }
-            else
-            {
-                Serial.println("WiFi Status: Disconnected");
-            }
-        }
-        else if (command == "websocket")
-        {
-            Serial.print("WebSocket Status: ");
-            Serial.println(webSocketConnected ? "Connected" : "Disconnected");
-            Serial.print("Host: ");
-            Serial.print(websocket_host);
-            Serial.print(":");
-            Serial.println(websocket_port);
-        }
-        else if (command == "flash")
-        {
-            digitalWrite(4, HIGH);
-            delay(500);
-            digitalWrite(4, LOW);
-            Serial.println("Flash LED test");
-        }
-        else if (command == "heartbeat")
-        {
-            sendHeartbeat();
-            Serial.println("Heartbeat sent manually");
-        }
-        else if (command == "reconnect")
-        {
-            DEBUG_PRINTLN("Attempting reconnection...");
-            WiFi.reconnect();
-            webSocket.begin(websocket_host, websocket_port);
-        }
-        else if (command == "help")
-        {
-            Serial.println("Available commands:");
-            Serial.println("  status  - Show system status");
-            Serial.println("  wifi    - Show WiFi status");
-            Serial.println("  websocket - Show WebSocket status");
-            Serial.println("  flash   - Test flash LED");
-            Serial.println("  heartbeat - Send manual heartbeat");
-            Serial.println("  reconnect - Attempt reconnection");
-            Serial.println("  help - Show this help");
-        }
-    }
+void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
+  if (type == WStype_TEXT) {
+    String msg = (char*)payload;
+    if (msg.indexOf("flash_on") >= 0) digitalWrite(FLASH_LED_PIN, HIGH);
+    else if (msg.indexOf("flash_off") >= 0) digitalWrite(FLASH_LED_PIN, LOW);
+  }
 }
