@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  // Still required in v4 when using JS config
+  // Content paths for Tailwind to scan for classes
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
