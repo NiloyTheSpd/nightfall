@@ -1,116 +1,90 @@
 /**
  * @file    main_front_enhanced.cpp
- * @brief   Project Nightfall - Optimized Front Slave
- * @version 3.1.0
+ * @brief   SLAVE (Front) - Receives commands & drives motors
  */
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
-#define M1_L_PWM 13  
-#define M1_L_IN1 23
-#define M1_L_IN2 22
-#define M1_R_PWM 25  
-#define M1_R_IN1 26
-#define M1_R_IN2 27
+// Front Motors (Wire.txt অনুযায়ী)
+#define M1_ENA 13
+#define M1_IN1 23
+#define M1_IN2 22
+#define M1_ENB 25
+#define M1_IN3 26
+#define M1_IN4 27
 
-#define M2_L_PWM 14  
-#define M2_L_IN1 32
-#define M2_L_IN2 33
-#define M2_R_PWM 18  
-#define M2_R_IN1 19
-#define M2_R_IN2 21
+// Middle Motors
+#define M2_ENA 14
+#define M2_IN1 32
+#define M2_IN2 33
+#define M2_ENB 18
+#define M2_IN3 19
+#define M2_IN4 21
 
-#define RXD2 16
-#define TXD2 17
+void setMotor(int en, int in1, int in2, int speed);
 
-const unsigned long TIMEOUT_MS = 1000;    
-const unsigned long HEARTBEAT_MS = 500;   
+void setup()
+{
+    Serial.begin(115200);
+    Serial2.begin(115200, SERIAL_8N1, 16, 17); // Listen to Rear
 
-unsigned long lastSignalTime = 0;
-unsigned long lastHeartbeatTime = 0;
-bool emergencyState = false;
-
-int t_FL = 0, t_FR = 0, t_CL = 0, t_CR = 0;
-
-void setMotor(int pwmPin, int in1, int in2, int speed);
-void handleUART();
-void sendHeartbeat();
-void emergencyStop();
-
-void setup() {
-    Serial.begin(115200);  
-    Serial2.begin(115200, SERIAL_8N1, RXD2, TXD2); 
-
-    pinMode(M1_L_PWM, OUTPUT); pinMode(M1_L_IN1, OUTPUT); pinMode(M1_L_IN2, OUTPUT);
-    pinMode(M1_R_PWM, OUTPUT); pinMode(M1_R_IN1, OUTPUT); pinMode(M1_R_IN2, OUTPUT);
-    
-    pinMode(M2_L_PWM, OUTPUT); pinMode(M2_L_IN1, OUTPUT); pinMode(M2_L_IN2, OUTPUT);
-    pinMode(M2_R_PWM, OUTPUT); pinMode(M2_R_IN1, OUTPUT); pinMode(M2_R_IN2, OUTPUT);
-
-    emergencyStop(); 
+    // Pin Setup
+    pinMode(M1_ENA, OUTPUT);
+    pinMode(M1_IN1, OUTPUT);
+    pinMode(M1_IN2, OUTPUT);
+    pinMode(M1_ENB, OUTPUT);
+    pinMode(M1_IN3, OUTPUT);
+    pinMode(M1_IN4, OUTPUT);
+    pinMode(M2_ENA, OUTPUT);
+    pinMode(M2_IN1, OUTPUT);
+    pinMode(M2_IN2, OUTPUT);
+    pinMode(M2_ENB, OUTPUT);
+    pinMode(M2_IN3, OUTPUT);
+    pinMode(M2_IN4, OUTPUT);
 }
 
-void loop() {
-    unsigned long now = millis();
-    handleUART();
-
-    if (now - lastSignalTime > TIMEOUT_MS) {
-        if (!emergencyState) {
-            emergencyStop();
-            emergencyState = true;
-        }
-    } else {
-        emergencyState = false;
-        setMotor(M1_L_PWM, M1_L_IN1, M1_L_IN2, t_FL);
-        setMotor(M1_R_PWM, M1_R_IN1, M1_R_IN2, t_FR);
-        setMotor(M2_L_PWM, M2_L_IN1, M2_L_IN2, t_CL);
-        setMotor(M2_R_PWM, M2_R_IN1, M2_R_IN2, t_CR);
-    }
-
-    if (now - lastHeartbeatTime > HEARTBEAT_MS) {
-        sendHeartbeat();
-        lastHeartbeatTime = now;
-    }
-}
-
-void handleUART() {
-    if (Serial2.available()) {
+void loop()
+{
+    if (Serial2.available())
+    {
         String data = Serial2.readStringUntil('\n');
         JsonDocument doc;
         DeserializationError err = deserializeJson(doc, data);
 
-        if (!err) {
-            lastSignalTime = millis();
-            t_FL = doc["L"] | 0;
-            t_FR = doc["R"] | 0;
-            t_CL = doc["CL"] | 0;
-            t_CR = doc["CR"] | 0;
+        if (!err)
+        {
+            int L = doc["L"];
+            int R = doc["R"];
+
+            // Front Wheels
+            setMotor(M1_ENA, M1_IN1, M1_IN2, L);
+            setMotor(M1_ENB, M1_IN3, M1_IN4, R);
+
+            // Middle Wheels (Copy logic)
+            setMotor(M2_ENA, M2_IN1, M2_IN2, L);
+            setMotor(M2_ENB, M2_IN3, M2_IN4, R);
         }
     }
 }
 
-void setMotor(int pwmPin, int in1, int in2, int speed) {
-    speed = constrain(speed, -255, 255);
-    if (speed > 0) {
-        digitalWrite(in1, HIGH); digitalWrite(in2, LOW); analogWrite(pwmPin, speed);
-    } else if (speed < 0) {
-        digitalWrite(in1, LOW); digitalWrite(in2, HIGH); analogWrite(pwmPin, abs(speed));
-    } else {
-        digitalWrite(in1, LOW); digitalWrite(in2, LOW); analogWrite(pwmPin, 0);
+void setMotor(int en, int in1, int in2, int speed)
+{
+    if (speed > 0)
+    {
+        digitalWrite(in1, HIGH);
+        digitalWrite(in2, LOW);
+        analogWrite(en, speed);
     }
-}
-
-void emergencyStop() {
-    t_FL = 0; t_FR = 0; t_CL = 0; t_CR = 0;
-    setMotor(M1_L_PWM, M1_L_IN1, M1_L_IN2, 0);
-    setMotor(M1_R_PWM, M1_R_IN1, M1_R_IN2, 0);
-    setMotor(M2_L_PWM, M2_L_IN1, M2_L_IN2, 0);
-    setMotor(M2_R_PWM, M2_R_IN1, M2_R_IN2, 0);
-}
-
-void sendHeartbeat() {
-    char buffer[64];
-    snprintf(buffer, sizeof(buffer), 
-        "{\"type\":\"heartbeat\",\"leftSpeed\":%d,\"rightSpeed\":%d}", t_FL, t_FR);
-    Serial2.println(buffer);
+    else if (speed < 0)
+    {
+        digitalWrite(in1, LOW);
+        digitalWrite(in2, HIGH);
+        analogWrite(en, abs(speed));
+    }
+    else
+    {
+        digitalWrite(in1, LOW);
+        digitalWrite(in2, LOW);
+        analogWrite(en, 0);
+    }
 }
