@@ -1,19 +1,11 @@
-import React, { useState } from 'react';
-import { Maximize2, Minimize2, Download, X, Wifi } from 'lucide-react';
+import React from 'react';
+import { Maximize2, Minimize2, Download, X } from 'lucide-react';
 import MjpegVideo from './MjpegVideo';
 
-const FullscreenVideo = ({ isOpen, onClose, cameraIp, cameraStatus, fallbackIp = null }) => {
-  const [isUsingFallback, setIsUsingFallback] = useState(false);
-  
+const CAMERA_STREAM_URL = 'http://192.168.4.2/stream'; // Fixed camera stream URL
+
+const FullscreenVideo = ({ isOpen, onClose, cameraStatus }) => {
   if (!isOpen) return null;
-
-  // Determine which IP to use
-  const activeIp = isUsingFallback && fallbackIp ? fallbackIp : cameraIp;
-  const streamUrl = `http://${activeIp}/stream`;
-
-  const handleFallbackModeChange = (isFallback) => {
-    setIsUsingFallback(isFallback);
-  };
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
@@ -24,14 +16,8 @@ const FullscreenVideo = ({ isOpen, onClose, cameraIp, cameraStatus, fallbackIp =
             <div className={`w-3 h-3 rounded-full ${cameraStatus ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}></div>
             <span className="text-white font-medium">{cameraStatus ? 'LIVE' : 'OFFLINE'}</span>
           </div>
-          <div className="text-gray-400 text-sm flex items-center gap-2">
-            <span>Camera: {activeIp}</span>
-            {isUsingFallback && (
-              <span className="text-amber-400 flex items-center gap-1">
-                <Wifi className="w-3 h-3" />
-                (Fallback)
-              </span>
-            )}
+          <div className="text-gray-400 text-sm">
+            <span>Camera: 192.168.4.2</span>
           </div>
         </div>
 
@@ -48,11 +34,9 @@ const FullscreenVideo = ({ isOpen, onClose, cameraIp, cameraStatus, fallbackIp =
       <div className="flex-1 flex items-center justify-center p-4">
         {cameraStatus ? (
           <MjpegVideo
-            streamUrl={streamUrl}
+            streamUrl={CAMERA_STREAM_URL}
             isActive={true}
             showFps={true}
-            fallbackIp={fallbackIp}
-            onFallbackModeChange={handleFallbackModeChange}
             className="w-full h-full"
             placeholderClassName="rounded-xl"
           />
@@ -60,11 +44,6 @@ const FullscreenVideo = ({ isOpen, onClose, cameraIp, cameraStatus, fallbackIp =
           <div className="text-center text-white">
             <div className="text-2xl mb-4">Camera Offline</div>
             <div className="text-gray-400">Waiting for video stream...</div>
-            {fallbackIp && (
-              <div className="mt-4 text-sm text-amber-400">
-                Fallback IP available: {fallbackIp}
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -79,7 +58,7 @@ const FullscreenVideo = ({ isOpen, onClose, cameraIp, cameraStatus, fallbackIp =
           <button
             onClick={() => {
               const link = document.createElement('a');
-              link.href = `http://${activeIp}/stream`;
+              link.href = CAMERA_STREAM_URL;
               link.download = `snapshot-${Date.now()}.jpg`;
               link.click();
             }}

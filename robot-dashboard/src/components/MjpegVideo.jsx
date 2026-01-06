@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Video, RefreshCw, AlertTriangle, Eye, Wifi, WifiOff } from 'lucide-react';
+import { Video, RefreshCw, AlertTriangle, Eye } from 'lucide-react';
 
 /**
  * MjpegVideo - A proper MJPEG stream viewer for ESP-CAM and similar cameras
@@ -11,15 +11,15 @@ import { Video, RefreshCw, AlertTriangle, Eye, Wifi, WifiOff } from 'lucide-reac
  * - Shows placeholder when camera is offline
  * - Displays "No Camera Signal" overlay when disconnected
  */
+const CAMERA_STREAM_URL = 'http://192.168.4.2/stream'; // Fixed camera stream URL
+
 const MjpegVideo = ({ 
   streamUrl, 
   isActive = true,
   onFpsUpdate,
   showFps = false,
   className = "",
-  placeholderClassName = "",
-  fallbackIp = null,
-  onFallbackModeChange
+  placeholderClassName = ""
 }) => {
   const canvasRef = useRef(null);
   const abortControllerRef = useRef(null);
@@ -31,7 +31,6 @@ const MjpegVideo = ({
   const [connectionState, setConnectionState] = useState('disconnected'); // disconnected, connecting, connected, error
   const [error, setError] = useState(null);
   const [fps, setFps] = useState(0);
-  const [isUsingFallback, setIsUsingFallback] = useState(false);
 
   // Cleanup function
   const stopStream = useCallback(() => {
@@ -200,15 +199,11 @@ const MjpegVideo = ({
     }
   }, [streamUrl, isActive, readStream]);
 
-  // Retry with fallback IP
-  const retryWithFallback = useCallback(() => {
-    if (fallbackIp && !isUsingFallback) {
-      setIsUsingFallback(true);
-      if (onFallbackModeChange) onFallbackModeChange(true);
-      stopStream();
-      // The streamUrl will be reconstructed with fallback IP
-    }
-  }, [fallbackIp, isUsingFallback, onFallbackModeChange, stopStream]);
+  // Retry function
+  const retryConnection = useCallback(() => {
+    stopStream();
+    startStream();
+  }, [stopStream, startStream]);
 
   // Effect to start/stop stream
   useEffect(() => {
@@ -223,10 +218,8 @@ const MjpegVideo = ({
     };
   }, [isActive, streamUrl, startStream, stopStream]);
 
-  // Calculate actual stream URL (considering fallback)
-  const actualStreamUrl = isUsingFallback && fallbackIp 
-    ? streamUrl.replace(/http:\/\/[^\/]+/, `http://${fallbackIp}`)
-    : streamUrl;
+  // Calculate actual stream URL
+  const actualStreamUrl = streamUrl;
 
   return (
     <div className={`relative w-full h-full ${className}`}>
@@ -273,15 +266,13 @@ const MjpegVideo = ({
             <span className="text-white font-medium">Camera Connection Failed</span>
             <span className="text-gray-400 text-sm">{error || 'Unable to connect to camera stream'}</span>
             
-            {fallbackIp && !isUsingFallback && (
-              <button 
-                onClick={retryWithFallback}
-                className="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Try Fallback IP ({fallbackIp})
-              </button>
-            )}
+            <button 
+              onClick={retryConnection}
+              className="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Retry Connection
+            </button>
           </div>
         </div>
       )}
@@ -290,7 +281,7 @@ const MjpegVideo = ({
       {connectionState === 'disconnected' && (
         <div className={`absolute inset-0 flex flex-col items-center justify-center bg-gray-900 ${placeholderClassName}`}>
           <div className="flex flex-col items-center gap-4">
-            <WifiOff className="w-12 h-12 text-gray-500" />
+            <Video className="w-12 h-12 text-gray-500" />
             <span className="text-gray-400 text-sm">Camera Disconnected</span>
           </div>
         </div>
@@ -309,17 +300,6 @@ const MjpegVideo = ({
         <div className="absolute top-4 left-4 bg-black/60 px-3 py-1.5 rounded text-xs text-white backdrop-blur flex items-center gap-2">
           <Eye className="w-3 h-3 text-blue-400" />
           <span>FPS: {fps}</span>
-          {isUsingFallback && (
-            <span className="text-amber-400">(Fallback)</span>
-          )}
-        </div>
-      )}
-
-      {/* Using Fallback IP Indicator */}
-      {isUsingFallback && (
-        <div className="absolute bottom-4 left-4 bg-amber-500/20 px-3 py-1.5 rounded text-xs text-amber-400 border border-amber-500/30 flex items-center gap-2">
-          <Wifi className="w-3 h-3" />
-          <span>Auto-Linked: {fallbackIp}</span>
         </div>
       )}
     </div>
